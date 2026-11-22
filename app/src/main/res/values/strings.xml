@@ -101,6 +101,11 @@
          the radar may be on but held by another app or device. -->
     <string name="overlay_radar_not_on">No rear radar</string>
     <string name="overlay_radar_not_on_sub">Is it on?</string>
+    <!-- The single letters the overlay's low-battery warning draws for the radar
+         and the dashcam. settings_radar_show_labels_subtitle formats both in, so
+         it needs no edit, but check it still reads right when a letter changes. -->
+    <string name="overlay_battery_letter_radar">R</string>
+    <string name="overlay_battery_letter_dashcam">D</string>
 
     <!-- ════════════════════════════════════════════════════════════════
          Home screen (MainScreen.kt, MainStatus.kt)
@@ -548,9 +553,11 @@
          interval, longer beyond it (RadarLinkCoordinator.noRadarGraceMs). -->
     <string name="settings_radar_no_radar_warning_subtitle">With eBike data on and Bosch Flow running: <xliff:g id="seconds" example="90">%1$d</xliff:g> seconds into a ride with no radar connected, you hear three low pulses, up to three times, and see a warning on the overlay.</string>
     <string name="settings_radar_low_battery_title">Low-battery threshold</string>
-    <string name="settings_radar_low_battery_helper">Show an amber warning beside the rider when any paired device drops below this level.</string>
-    <string name="settings_radar_show_labels_title">Show device labels</string>
-    <string name="settings_radar_show_labels_subtitle">Show \'RADAR 12%\' or \'DASHCAM 8%\' on screen instead of a silent warning tint.</string>
+    <string name="settings_radar_low_battery_helper">Show an amber warning at the bottom of the overlay when the radar or dashcam battery is at this level or lower.</string>
+    <string name="settings_radar_show_labels_title">Show which device is low</string>
+    <!-- The arguments are the two letters the overlay draws
+         (overlay_battery_letter_radar, overlay_battery_letter_dashcam). -->
+    <string name="settings_radar_show_labels_subtitle">The warning shows <xliff:g id="radar_letter" example="R">%1$s</xliff:g> for the radar and <xliff:g id="dashcam_letter" example="D">%2$s</xliff:g> for the dashcam. With this off, one amber dot stands for either.</string>
     <string name="settings_radar_close_pass_title">Count close passes</string>
     <string name="settings_radar_close_pass_subtitle">Count overtakes that squeeze past too close - on the home screen and in your ride history.</string>
     <string name="settings_radar_close_pass_subtitle_ha">Count overtakes that squeeze past too close - on the home screen, in your ride history, and sent to Home Assistant.</string>
@@ -708,7 +715,7 @@
     <string name="settings_dashcam_change">Change</string>
     <string name="settings_dashcam_behaviour_label">Behaviour</string>
     <string name="settings_dashcam_warn_off">Warn on overlay when dashcam is off</string>
-    <string name="settings_dashcam_warn_off_subtitle">Show a camera-off icon next to the rider when your phone can\'t pick up the dashcam.</string>
+    <string name="settings_dashcam_warn_off_subtitle">Show a camera-off icon at the bottom of the overlay when your phone can\'t pick up the dashcam.</string>
     <string name="settings_dashcam_walkaway_label">Walk-away alarm</string>
     <string name="settings_dashcam_walkaway_alert">Alert if the dashcam is still on</string>
     <!-- The 15 min is IdleGate.DASHCAM_POST_DISCONNECT_WINDOW_MS, after which

@@ -378,9 +378,51 @@ class RadarOverlayViewTest {
     }
 
     @Test
+    fun batteryLowRadarAndDashcamWithLabels() {
+        // Both devices low, labels on, English: the dashcam's letter is "D" and
+        // the radar's "R", side by side. The selected dashcam is the one slug
+        // the warning draws as the camera; the other low device is the radar.
+        overlay().apply {
+            setDashcamStatus(DashcamStatus.Ok, "dc1")
+            setBatteryLow(setOf("dc1", "rearvue8"), showLabels = true)
+        }.capture()
+    }
+
+    @Test
+    @Config(qualifiers = "+es")
+    fun batteryLowDashcamOnlyWithLabelsEs() {
+        // The dashcam alone, labels on, Spanish: "C" for cámara. The letter
+        // is the locale's own, not a fixed one.
+        overlay().apply {
+            setDashcamStatus(DashcamStatus.Ok, "dc1")
+            setBatteryLow(setOf("dc1"), showLabels = true)
+        }.capture()
+    }
+
+    @Test
     fun dashcamMissing() {
         overlay().apply {
             setDashcamStatus(DashcamStatus.Missing, "dc1")
+        }.capture()
+    }
+
+    @Test
+    fun dashcamMissingWithRadarLowLabelsOn() {
+        // The camera-off icon with the radar low and labels on: the icon and
+        // the radar's letter beside it.
+        overlay().apply {
+            setDashcamStatus(DashcamStatus.Missing, "dc1")
+            setBatteryLow(setOf("rearvue8"), showLabels = true)
+        }.capture()
+    }
+
+    @Test
+    fun dashcamMissingWithRadarLowLabelsOff() {
+        // Labels off means no letters anywhere: the radar's low battery beside
+        // the camera-off icon is the same amber dot the plain warning draws.
+        overlay().apply {
+            setDashcamStatus(DashcamStatus.Missing, "dc1")
+            setBatteryLow(setOf("rearvue8"), showLabels = false)
         }.capture()
     }
 

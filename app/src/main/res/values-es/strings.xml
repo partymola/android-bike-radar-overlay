@@ -84,6 +84,8 @@
          "desconectado"); aparece cuando ya ha sonado el aviso. -->
     <string name="overlay_radar_not_on">Sin radar trasero</string>
     <string name="overlay_radar_not_on_sub">¿Está encendido?</string>
+    <string name="overlay_battery_letter_radar">R</string>
+    <string name="overlay_battery_letter_dashcam">C</string>
 
     <!-- ════════════════════════════════════════════════════════════════
          Pantalla de inicio (MainScreen.kt, MainStatus.kt)
@@ -477,9 +479,9 @@
     <string name="settings_radar_no_radar_warning_title">Avisar si vas sin el radar</string>
     <string name="settings_radar_no_radar_warning_subtitle">Con los datos de la eBike activados y Bosch Flow en segundo plano: si llevas <xliff:g id="seconds" example="90">%1$d</xliff:g> s en marcha sin el radar conectado, suenan 3 pulsos graves, hasta 3 veces, y aparece un aviso en la barra lateral.</string>
     <string name="settings_radar_low_battery_title">Umbral de batería baja</string>
-    <string name="settings_radar_low_battery_helper">Muestra un aviso ámbar junto al ciclista cuando cualquier dispositivo emparejado baja de este nivel.</string>
-    <string name="settings_radar_show_labels_title">Mostrar etiquetas de dispositivo</string>
-    <string name="settings_radar_show_labels_subtitle">Muestra \'RADAR 12%\' o \'CÁMARA 8%\' en pantalla en lugar de un cambio de color discreto.</string>
+    <string name="settings_radar_low_battery_helper">Muestra un aviso ámbar al pie de la barra lateral cuando la batería del radar o de la cámara está en este nivel o por debajo.</string>
+    <string name="settings_radar_show_labels_title">Identificar el dispositivo</string>
+    <string name="settings_radar_show_labels_subtitle">El aviso muestra una <xliff:g id="radar_letter" example="R">%1$s</xliff:g> para el radar y una <xliff:g id="dashcam_letter" example="C">%2$s</xliff:g> para la cámara. Con esta opción desactivada, verás un solo punto ámbar para cualquiera de los dos.</string>
     <string name="settings_radar_close_pass_title">Contar adelantamientos ajustados</string>
     <string name="settings_radar_close_pass_subtitle">Cuenta los adelantamientos que pasan demasiado cerca y los muestra en la pantalla de inicio y en tu historial de rutas.</string>
     <string name="settings_radar_close_pass_subtitle_ha">Cuenta los adelantamientos que pasan demasiado cerca; los muestra en la pantalla de inicio y en tu historial de rutas, y los envía a Home Assistant.</string>
@@ -631,7 +633,7 @@
     <string name="settings_dashcam_change">Cambiar</string>
     <string name="settings_dashcam_behaviour_label">Comportamiento</string>
     <string name="settings_dashcam_warn_off">Avisar en la barra lateral cuando la cámara delantera está apagada</string>
-    <string name="settings_dashcam_warn_off_subtitle">Muestra un icono de cámara apagada junto al ciclista cuando el teléfono no detecta la cámara delantera.</string>
+    <string name="settings_dashcam_warn_off_subtitle">Muestra un icono de cámara apagada al pie de la barra lateral cuando el teléfono no detecta la cámara delantera.</string>
     <string name="settings_dashcam_walkaway_label">Alarma al alejarte</string>
     <string name="settings_dashcam_walkaway_alert">Avisar si la cámara sigue encendida</string>
     <string name="settings_dashcam_walkaway_alert_subtitle">Suena cuando el radar lleva desconectado el tiempo que elijas (30 s por defecto) y el teléfono sigue detectando la cámara delantera.\n• Usa el sonido de alarma del teléfono a todo volumen y vibra\n• Se repite cada 5 min hasta que la descartes. Se detiene si vuelve el radar o el teléfono deja de detectar la cámara\n• Sin el cambio automático día/noche de la luz de la cámara (Ajustes → Modo automático de luces), se detiene unos 15 min después de que se desconecte el radar\n• No suena si el radar se desconecta en marcha o en los 30 s siguientes a parar. Con un radar que solo mide la distancia, puede sonar en marcha\n• Con los datos de la eBike activados y Bosch Flow en segundo plano, sí suena si bloqueas la bici y te alejas enseguida, y no suena si la bici estaba sin bloquear cuando se desconectó el radar\n• Si suena la alarma del radar al alejarte (Ajustes → Alertas), esta no suena, y la del radar nombra la cámara si el teléfono la estaba detectando</string>

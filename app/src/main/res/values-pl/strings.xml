@@ -106,6 +106,8 @@
          the radar may be on but held by another app or device. -->
     <string name="overlay_radar_not_on">Brak tylnego radaru</string>
     <string name="overlay_radar_not_on_sub">Czy jest włączony?</string>
+    <string name="overlay_battery_letter_radar">R</string>
+    <string name="overlay_battery_letter_dashcam">K</string>
     <!-- ════════════════════════════════════════════════════════════════
          Home screen (MainScreen.kt, MainStatus.kt)
          ════════════════════════════════════════════════════════════════ -->
@@ -570,9 +572,9 @@
          interval, longer beyond it (RadarLinkCoordinator.noRadarGraceMs). -->
     <string name="settings_radar_no_radar_warning_subtitle">Przy włączonych danych eBike i działającym Bosch Flow: po <xliff:g id="seconds" example="90">%1$d</xliff:g> sekundach jazdy bez połączonego radaru usłyszysz trzy niskie impulsy (maksymalnie trzykrotnie) i zobaczysz ostrzeżenie na nakładce.</string>
     <string name="settings_radar_low_battery_title">Próg niskiego poziomu baterii</string>
-    <string name="settings_radar_low_battery_helper">Pokaż żółte ostrzeżenie obok rowerzysty, gdy poziom baterii sparowanego urządzenia spadnie poniżej tej wartości.</string>
-    <string name="settings_radar_show_labels_title">Pokaż nazwy urządzeń</string>
-    <string name="settings_radar_show_labels_subtitle">Pokazuj na ekranie „RADAR 12 proc.” lub „KAMERA 8 proc.” zamiast samego kolorowego ostrzeżenia.</string>
+    <string name="settings_radar_low_battery_helper">Żółte ostrzeżenie pojawia się u dołu nakładki, gdy poziom baterii radaru lub kamery wynosi tyle lub mniej.</string>
+    <string name="settings_radar_show_labels_title">Rozróżniaj urządzenia</string>
+    <string name="settings_radar_show_labels_subtitle">Ostrzeżenie pokazuje literę <xliff:g id="radar_letter" example="R">%1$s</xliff:g> dla radaru i <xliff:g id="dashcam_letter" example="K">%2$s</xliff:g> dla kamery. Gdy ta opcja jest wyłączona, widać jedną żółtą kropkę, niezależnie od urządzenia.</string>
     <string name="settings_radar_close_pass_title">Zliczaj bliskie wyprzedzenia</string>
     <string name="settings_radar_close_pass_subtitle">Zliczaj pojazdy wyprzedzające zbyt blisko, pokazując je na ekranie głównym i w historii przejazdów.</string>
     <string name="settings_radar_close_pass_subtitle_ha">Zliczaj pojazdy wyprzedzające zbyt blisko, pokazując je na ekranie głównym, w historii przejazdów i wysyłając do Home Assistant.</string>
@@ -728,7 +730,7 @@
     <string name="settings_dashcam_change">Zmień</string>
     <string name="settings_dashcam_behaviour_label">Działanie</string>
     <string name="settings_dashcam_warn_off">Ostrzegaj na nakładce, gdy kamera jest wyłączona</string>
-    <string name="settings_dashcam_warn_off_subtitle">Pokaż ikonę wyłączonej kamery obok rowerzysty, gdy telefon nie wykrywa jej sygnału.</string>
+    <string name="settings_dashcam_warn_off_subtitle">Pokaż ikonę wyłączonej kamery u dołu nakładki, gdy telefon nie wykrywa jej sygnału.</string>
     <string name="settings_dashcam_walkaway_label">Alarm oddalenia się</string>
     <string name="settings_dashcam_walkaway_alert">Ostrzegaj, jeśli kamera pozostaje włączona</string>
     <!-- The 15 min is IdleGate.DASHCAM_POST_DISCONNECT_WINDOW_MS, after which

@@ -50,6 +50,7 @@ class RadarOverlayView(context: Context) : View(context) {
     }
     private val riderPath = android.graphics.Path()
     private val tmpRect = RectF()
+    private val textBounds = android.graphics.Rect()
     private val boxFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val boxStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
@@ -126,6 +127,11 @@ class RadarOverlayView(context: Context) : View(context) {
         color = COLOR_AMBER
         typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
     }
+
+    // Read once: the view is built per radar connection, so a language change
+    // shows from the next one.
+    private val batteryLetterRadar: String = context.getString(R.string.overlay_battery_letter_radar)
+    private val batteryLetterDashcam: String = context.getString(R.string.overlay_battery_letter_dashcam)
     private val cameraOffDrawable: android.graphics.drawable.Drawable? =
         androidx.core.content.res.ResourcesCompat.getDrawable(
             resources,
@@ -496,14 +502,23 @@ class RadarOverlayView(context: Context) : View(context) {
         val otherLow = batteryLowSlugs.any { it != selectedDashcam }
 
         // Dashcam indicator takes precedence over generic low-battery glyph.
-        // "Other" low-battery (the rear radar) gets its own "R" next to the
-        // dashcam warning so both states remain visible at a glance.
+        // "Other" low-battery (the rear radar) gets its own radar letter, or the
+        // labels-off dot, next to the dashcam warning so both states remain
+        // visible at a glance.
         if (status != DashcamStatus.Ok) {
             drawDashcamIndicator(canvas, cx, cy, status)
             if (otherLow) {
-                batteryLabelPaint.textSize = dp(14f)
-                batteryLabelPaint.color = COLOR_AMBER
-                canvas.drawText("R", cx - dp(14f), cy, batteryLabelPaint)
+                // Clear of the icon's left edge (cx - 14dp) with a small gap,
+                // centred on the icon's middle.
+                val markX = cx - dp(22f)
+                if (batteryShowLabels) {
+                    batteryLabelPaint.textSize = dp(14f)
+                    batteryLabelPaint.color = COLOR_AMBER
+                    batteryLabelPaint.getTextBounds(batteryLetterRadar, 0, batteryLetterRadar.length, textBounds)
+                    canvas.drawText(batteryLetterRadar, markX, cy - textBounds.exactCenterY(), batteryLabelPaint)
+                } else {
+                    canvas.drawCircle(markX, cy, dp(5f), batteryDotPaint)
+                }
             }
             return
         }
@@ -516,11 +531,11 @@ class RadarOverlayView(context: Context) : View(context) {
         } else {
             when {
                 dashcamLow && otherLow -> {
-                    canvas.drawText("V", cx - dp(7f), cy, batteryLabelPaint)
-                    canvas.drawText("R", cx + dp(7f), cy, batteryLabelPaint)
+                    canvas.drawText(batteryLetterDashcam, cx - dp(7f), cy, batteryLabelPaint)
+                    canvas.drawText(batteryLetterRadar, cx + dp(7f), cy, batteryLabelPaint)
                 }
-                dashcamLow -> canvas.drawText("V", cx, cy, batteryLabelPaint)
-                otherLow -> canvas.drawText("R", cx, cy, batteryLabelPaint)
+                dashcamLow -> canvas.drawText(batteryLetterDashcam, cx, cy, batteryLabelPaint)
+                otherLow -> canvas.drawText(batteryLetterRadar, cx, cy, batteryLabelPaint)
             }
         }
     }

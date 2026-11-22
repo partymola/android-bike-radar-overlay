@@ -554,7 +554,11 @@ internal fun SettingsRadarContent(
             SettingsRowGroup {
                 SettingsToggleRow(
                     title = stringResource(R.string.settings_radar_show_labels_title),
-                    subtitle = stringResource(R.string.settings_radar_show_labels_subtitle),
+                    subtitle = stringResource(
+                        R.string.settings_radar_show_labels_subtitle,
+                        stringResource(R.string.overlay_battery_letter_radar),
+                        stringResource(R.string.overlay_battery_letter_dashcam),
+                    ),
                     checked = batteryShowLabels,
                     onCheckedChange = onBatteryShowLabelsChange,
                 )

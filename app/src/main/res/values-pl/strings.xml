@@ -362,7 +362,7 @@
     <string name="onboarding_ebike_title">Stan roweru eBike</string>
     <string name="onboarding_ebike_sub">Wyświetlaj poziom baterii i stan połączenia eBike podczas jazdy. Działa równolegle z aplikacją Bosch Flow.</string>
     <string name="onboarding_ebike_bullet_status">Bateria i stan eBike na ekranie głównym</string>
-    <string name="onboarding_ebike_bullet_timing">Częstotliwość sygnałów zależy od prędkości koła</string>
+    <string name="onboarding_ebike_bullet_timing">Sygnały milkną na postoju i wracają wcześniej, gdy ruszasz</string>
     <string name="onboarding_ebike_bullet_no_radar">Ostrzeżenie podczas jazdy z wyłączonym radarem</string>
     <string name="onboarding_ebike_have_title">Mam eBike</string>
     <string name="onboarding_ebike_have_sub">Włącz go.</string>
@@ -703,7 +703,7 @@
     <string name="settings_ebike_open">Otwórz</string>
     <string name="settings_ebike_what_it_does_label">Co robi ta funkcja</string>
     <string name="settings_ebike_does_item_battery">Pokazuje baterię i stan połączenia eBike na ekranie głównym</string>
-    <string name="settings_ebike_does_item_timing">Dostosowuje częstotliwość sygnałów do prędkości koła</string>
+    <string name="settings_ebike_does_item_timing">Wycisza sygnały na postoju i przywraca je wcześniej, gdy ruszasz</string>
     <string name="settings_ebike_does_item_no_radar">Ostrzega, jeśli jedziesz bez włączonego radaru</string>
     <string name="settings_ebike_whats_collected_label">Jakie dane są zbierane</string>
     <string name="settings_ebike_collected_item_reads">Odczytuje baterię, prędkość, pedałowanie i blokadę roweru. Nie wysyła żadnych poleceń do roweru</string>

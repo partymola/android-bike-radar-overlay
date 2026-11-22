@@ -75,14 +75,17 @@ screen stays yours.
   light's own button and auto-mode won't switch it again until the radar
   has been off for two minutes. Off by default.
 - Bosch eBike data (read-only), while Bosch Flow is connected to the bike:
-  shows the bike's battery and connection status on the home screen. Its speed
-  sets the beep timing and drives the no-radar warning, and the bike's own
-  stopped signal tells the app when you have stopped. Its lock state feeds the
-  walk-away alarm and a reminder if you walk off without locking it, and, with
-  the stopped signal, marks ride start and end for Home Assistant if you use
-  it. Cadence, rider and motor power, assist mode and the bike's own distance
-  count go only into the capture log, which is off by default. Never sends a
-  command to the bike.
+  shows the bike's battery and connection status on the home screen. On a
+  radar that reports your speed, the bike's own stopped signal tells the app
+  you have set off before the radar's speed reading does, so the beeps come
+  back sooner after a stop. On a radar that reports range only, the bike is
+  the only way the app knows you have stopped: without an eBike, the beeps
+  never go quiet at a stop. The bike's speed also drives the no-radar warning.
+  Its lock state feeds the walk-away alarm and a reminder if you walk off
+  without locking it, and, with the stopped signal, marks ride start and end
+  for Home Assistant if you use it. Cadence, rider and motor power, assist
+  mode and the bike's own distance count go only into the capture log, which
+  is off by default. Never sends a command to the bike.
 - Walk-away alarm: if the radar goes off and the phone still picks up the
   dashcam, the phone sounds its alarm at full volume and vibrates. It waits a
   time you set, 30 seconds by default, then repeats every 5 minutes until you
@@ -418,8 +421,12 @@ ajustes de idioma por aplicación de Android (Android 13 o posterior).
   minutos apagado.
 - Datos de la eBike Bosch (solo lectura), mientras Bosch Flow está conectado a
   la bici: la pantalla de inicio muestra la batería y el estado de conexión.
-  Con la velocidad, la app ajusta el ritmo de los pitidos y activa el aviso de
-  radar sin conectar, y la bici le indica cuándo estás parado. Según esté
+  Con un radar que mide tu velocidad, la señal de parada de la propia bici le
+  indica a la app que te has puesto en marcha antes que la velocidad del
+  radar, así que los pitidos vuelven antes tras parar. Con un radar que solo
+  mide la distancia, la bici es lo único que le dice que estás parado: sin
+  eBike, los pitidos nunca se callan al parar. Con la velocidad de la bici, la
+  app también activa el aviso de radar sin conectar. Según esté la bici
   bloqueada o no, ajusta la alarma al alejarte, te avisa si te alejas sin
   bloquearla y, si usas Home Assistant, marca allí, junto con la señal de
   parada, el inicio y el fin de la ruta. La cadencia, la potencia, el modo de

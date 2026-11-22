@@ -359,7 +359,7 @@
     <string name="onboarding_ebike_title">Your eBike status</string>
     <string name="onboarding_ebike_sub">Show your eBike battery and connection status while you ride - works alongside the Bosch Flow app.</string>
     <string name="onboarding_ebike_bullet_status">eBike battery and status on the home screen</string>
-    <string name="onboarding_ebike_bullet_timing">Beep timing scales with your wheel speed</string>
+    <string name="onboarding_ebike_bullet_timing">Beeps pause at a stop and come back sooner when you set off</string>
     <string name="onboarding_ebike_bullet_no_radar">A warning if you ride without the radar on</string>
     <string name="onboarding_ebike_have_title">I have one</string>
     <string name="onboarding_ebike_have_sub">Turn it on.</string>
@@ -682,7 +682,7 @@
     <string name="settings_ebike_open">Open</string>
     <string name="settings_ebike_what_it_does_label">What it does</string>
     <string name="settings_ebike_does_item_battery">Shows eBike battery and connection status on the home screen</string>
-    <string name="settings_ebike_does_item_timing">Scales beep timing to your wheel speed</string>
+    <string name="settings_ebike_does_item_timing">Pauses beeps at a stop and brings them back sooner when you set off</string>
     <string name="settings_ebike_does_item_no_radar">Warns you if you ride without the radar on</string>
     <string name="settings_ebike_whats_collected_label">What\'s collected</string>
     <string name="settings_ebike_collected_item_reads">Reads battery, speed, pedalling and lock state: read-only, never sends a command to your bike</string>

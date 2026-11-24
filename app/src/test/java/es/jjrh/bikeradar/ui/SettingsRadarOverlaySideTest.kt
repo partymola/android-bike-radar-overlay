@@ -4,6 +4,7 @@ package es.jjrh.bikeradar.ui
 
 import android.app.Application
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -104,6 +105,12 @@ class SettingsRadarOverlaySideTest {
         assertFalse(prefs.overlayOnLeft)
         assertEquals(0, dialogCount())
         sideRow().assert(hasText("Right"))
+    }
+
+    @Test
+    fun theSideRowSaysTappingChangesIt() {
+        showScreen()
+        assertEquals("change", sideRow().fetchSemanticsNode().config.getOrNull(SemanticsActions.OnClick)?.label)
     }
 
     @Test

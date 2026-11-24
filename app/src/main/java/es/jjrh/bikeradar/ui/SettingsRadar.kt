@@ -512,6 +512,7 @@ internal fun SettingsRadarContent(
                     subtitle = overlaySideLabel(overlayOnLeft),
                     onClick = onOverlaySideClick,
                     chevron = false,
+                    onClickLabel = stringResource(R.string.a11y_action_change),
                 )
                 SettingsToggleRow(
                     leadingIcon = Icons.Default.WidthNormal,

@@ -4,6 +4,7 @@ package es.jjrh.bikeradar.ui
 
 import android.app.Application
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -68,12 +69,23 @@ class SettingsLightsModePickerSemanticsTest {
         HaCredentials.cryptorFactory = { AndroidKeyStoreCryptor() }
     }
 
-    private fun openPicker(row: String) {
+    private fun showScreen() {
         composeRule.setContent {
             SettingsLights(navController = rememberNavController(), prefs = prefs)
         }
-        composeRule.onNode(hasText(row) and hasClickAction()).performScrollTo().performClick()
+    }
+
+    private fun modeRow(row: String) = composeRule.onNode(hasText(row) and hasClickAction()).performScrollTo()
+
+    private fun openPicker(row: String) {
+        showScreen()
+        modeRow(row).performClick()
         composeRule.waitForIdle()
+    }
+
+    /** Each mode row's title to the action TalkBack reads for a double-tap. */
+    private fun modeRowClickLabels(): Map<String, String?> = listOf("Daytime mode", "Night mode").associateWith {
+        modeRow(it).fetchSemanticsNode().config.getOrNull(SemanticsActions.OnClick)?.label
     }
 
     private fun radioRows(): List<SemanticsNode> = composeRule.onAllNodes(isRadio and inDialog, useUnmergedTree = true).fetchSemanticsNodes()
@@ -94,19 +106,41 @@ class SettingsLightsModePickerSemanticsTest {
         assertEquals(0, composeRule.onAllNodes(isDialog()).fetchSemanticsNodes().size)
     }
 
-    private fun showRadarPicker(row: String) {
+    private fun storeRadarModes() {
         prefs.radarLightAutoModeEnabled = true
         prefs.radarLightDayMode = RadarLightMode.SOLID
         prefs.radarLightNightMode = RadarLightMode.OFF
-        openPicker(row)
     }
 
-    private fun showDashcamPicker(row: String) {
+    private fun storeDashcamModes() {
         prefs.dashcamOwnership = DashcamOwnership.YES
         prefs.autoLightModeEnabled = true
         prefs.cameraLightDayMode = CameraLightMode.HIGH
         prefs.cameraLightNightMode = CameraLightMode.NIGHT_FLASH
+    }
+
+    private fun showRadarPicker(row: String) {
+        storeRadarModes()
         openPicker(row)
+    }
+
+    private fun showDashcamPicker(row: String) {
+        storeDashcamModes()
+        openPicker(row)
+    }
+
+    @Test
+    fun theRadarModeRowsSayTappingChangesTheMode() {
+        storeRadarModes()
+        showScreen()
+        assertEquals(mapOf("Daytime mode" to "change", "Night mode" to "change"), modeRowClickLabels())
+    }
+
+    @Test
+    fun theDashcamModeRowsSayTappingChangesTheMode() {
+        storeDashcamModes()
+        showScreen()
+        assertEquals(mapOf("Daytime mode" to "change", "Night mode" to "change"), modeRowClickLabels())
     }
 
     @Test
@@ -170,6 +204,28 @@ class SettingsLightsModePickerSemanticsTest {
         composeRule.waitForIdle()
 
         assertEquals(RadarLightMode.PELOTON, prefs.radarLightDayMode)
+        assertPickerClosed()
+    }
+
+    @Test
+    fun choosingARadarNightModeSavesOnlyTheNightMode() {
+        showRadarPicker("Night mode")
+        composeRule.onNode(isRadio and inDialog and hasText("Peloton")).performClick()
+        composeRule.waitForIdle()
+
+        assertEquals(RadarLightMode.PELOTON, prefs.radarLightNightMode)
+        assertEquals(RadarLightMode.SOLID, prefs.radarLightDayMode)
+        assertPickerClosed()
+    }
+
+    @Test
+    fun choosingADashcamDaytimeModeSavesOnlyTheDaytimeMode() {
+        showDashcamPicker("Daytime mode")
+        composeRule.onNode(isRadio and inDialog and hasText("Medium")).performClick()
+        composeRule.waitForIdle()
+
+        assertEquals(CameraLightMode.MEDIUM, prefs.cameraLightDayMode)
+        assertEquals(CameraLightMode.NIGHT_FLASH, prefs.cameraLightNightMode)
         assertPickerClosed()
     }
 

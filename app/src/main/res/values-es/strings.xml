@@ -25,6 +25,10 @@
     <!-- Estado que lee TalkBack en una fila que abre y cierra una lista. -->
     <string name="common_expanded">Desplegado</string>
     <string name="common_collapsed">Contraído</string>
+    <!-- Lo que hace una fila que abre un selector, tal como TalkBack lo lee
+         dentro de su frase "toca dos veces para %s": infinitivo en minúscula,
+         no la etiqueta de un botón (esa es common_change). -->
+    <string name="a11y_action_change">cambiar</string>
 
     <!-- Primitivas de UI (UiPrimitives.kt) -->
     <string name="ui_battery_pct"><xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>

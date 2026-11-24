@@ -244,6 +244,7 @@ internal fun SettingsLightsContent(
                     clickable = rearAuto,
                     enabled = rearAuto,
                     isLast = false,
+                    onClickLabel = stringResource(R.string.a11y_action_change),
                 )
                 SettingsRow(
                     icon = Icons.Default.DarkMode,
@@ -255,6 +256,7 @@ internal fun SettingsLightsContent(
                     clickable = rearAuto,
                     enabled = rearAuto,
                     isLast = true,
+                    onClickLabel = stringResource(R.string.a11y_action_change),
                 )
             }
 
@@ -293,6 +295,7 @@ internal fun SettingsLightsContent(
                         clickable = frontAuto,
                         enabled = frontAuto,
                         isLast = false,
+                        onClickLabel = stringResource(R.string.a11y_action_change),
                     )
                     SettingsRow(
                         icon = Icons.Default.DarkMode,
@@ -304,6 +307,7 @@ internal fun SettingsLightsContent(
                         clickable = frontAuto,
                         enabled = frontAuto,
                         isLast = true,
+                        onClickLabel = stringResource(R.string.a11y_action_change),
                     )
                 }
             } else {

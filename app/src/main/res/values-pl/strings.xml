@@ -33,6 +33,10 @@
     <!-- TalkBack state of a row that opens and closes a list in place. -->
     <string name="common_expanded">Rozwinięte</string>
     <string name="common_collapsed">Zwinięte</string>
+    <!-- What a row that opens a picker does, as TalkBack reads it inside its
+         own "double-tap to %s" phrase: a lowercase infinitive, not a button
+         label (that is common_change). -->
+    <string name="a11y_action_change">zmienić</string>
     <!-- UI primitives (UiPrimitives.kt) -->
     <string name="ui_battery_pct">
         <xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>

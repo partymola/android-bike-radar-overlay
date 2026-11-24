@@ -16,6 +16,8 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
@@ -35,6 +37,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
@@ -46,9 +49,11 @@ import org.robolectric.annotation.GraphicsMode
  * Native graphics: under the legacy mode a row measures 56 dp whatever its
  * minimum, so the 48 dp check could not fail.
  *
- * Each picker is opened with a stored mode that is not the pref's default,
- * and the two pickers of each kind with modes at different positions, so a
- * selection keyed to a fixed mode or position cannot pass.
+ * The announcement and choice tests open each picker with a stored mode that
+ * is not the pref's default, and the two pickers of each kind with modes at
+ * different positions, so a selection keyed to a fixed mode or position cannot
+ * pass. The landscape tests of what is in view on opening start at the
+ * default, which is their case.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -62,6 +67,8 @@ class SettingsLightsModePickerSemanticsTest {
     private val inDialog = hasAnyAncestor(isDialog())
     private val isRadio = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)
     private val isGroup = SemanticsMatcher.keyIsDefined(SemanticsProperties.SelectableGroup)
+    private val topEdge = "radioPickerTopDivider"
+    private val bottomEdge = "radioPickerBottomDivider"
 
     @Before
     fun setUp() {
@@ -121,6 +128,11 @@ class SettingsLightsModePickerSemanticsTest {
 
     private fun assertPickerClosed() {
         assertEquals(0, composeRule.onAllNodes(isDialog()).fetchSemanticsNodes().size)
+    }
+
+    /** The scroll-edge hairlines drawn, top first. */
+    private fun scrollEdgesShown(): List<String> = listOf(topEdge, bottomEdge).filter {
+        composeRule.onAllNodesWithTag(it).fetchSemanticsNodes().isNotEmpty()
     }
 
     private fun storeRadarModes() {
@@ -197,6 +209,78 @@ class SettingsLightsModePickerSemanticsTest {
         )
         assertOneGroupHoldsEveryRow(CameraLightMode.entries.size)
         assertEveryRowIsTallEnoughToHit(CameraLightMode.entries.size)
+    }
+
+    /** The phone rides landscape, where six modes do not fit the dialog's height. */
+    @Test
+    @Config(qualifiers = "w915dp-h412dp-land")
+    fun inLandscapeTheDashcamNightPickerScrollsToOffAtFullHeight() {
+        showDashcamPicker("Night mode")
+        assertEveryRowIsTallEnoughToHit(CameraLightMode.entries.size)
+
+        composeRule.onNode(isRadio and inDialog and hasText("Off")).performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        assertEquals(CameraLightMode.OFF, prefs.cameraLightNightMode)
+        assertEquals(CameraLightMode.HIGH, prefs.cameraLightDayMode)
+        assertPickerClosed()
+    }
+
+    /** Opened at the default, the fifth of six modes, on a 393 dp short side
+     *  less a gesture bar, where a dialog opened at its top shows a sliver of
+     *  that row. Wholly in view, not merely displayed, which a sliver passes. */
+    @Test
+    @Config(qualifiers = "w915dp-h369dp-land")
+    fun inLandscapeTheDashcamDaytimePickerOpensWithItsDefaultInView() {
+        prefs.dashcamOwnership = DashcamOwnership.YES
+        prefs.autoLightModeEnabled = true
+        assertEquals(CameraLightMode.DAY_FLASH, prefs.cameraLightDayMode)
+        openPicker("Daytime mode")
+
+        val row = composeRule.onNode(isRadio and inDialog and hasText("Day flash")).fetchSemanticsNode()
+        assertEquals(true, row.config.getOrNull(SemanticsProperties.Selected))
+        assertEquals(row.size.height.toFloat(), row.boundsInRoot.height, 0.5f)
+    }
+
+    /** Compose draws no scrollbar, so these hairlines are what says modes lie
+     *  above and below the ones in view. Each sits on the list's edge, 1 dp tall. */
+    @Test
+    @Config(qualifiers = "w915dp-h369dp-land")
+    fun inLandscapeTheDashcamDaytimePickerAtItsDefaultMarksModesAboveAndBelow() {
+        prefs.dashcamOwnership = DashcamOwnership.YES
+        prefs.autoLightModeEnabled = true
+        openPicker("Daytime mode")
+
+        assertEquals(listOf(topEdge, bottomEdge), scrollEdgesShown())
+        val list = composeRule.onNode(isGroup and inDialog, useUnmergedTree = true).fetchSemanticsNode()
+        val top = composeRule.onNodeWithTag(topEdge).fetchSemanticsNode()
+        val bottom = composeRule.onNodeWithTag(bottomEdge).fetchSemanticsNode()
+        val onePx = with(composeRule.density) { 1.dp.toPx() }
+        assertEquals(onePx, top.size.height.toFloat(), 0.01f)
+        assertEquals(onePx, bottom.size.height.toFloat(), 0.01f)
+        assertEquals(list.positionInRoot.y, top.positionInRoot.y, 0.5f)
+        assertEquals(list.positionInRoot.y + list.size.height, bottom.positionInRoot.y + bottom.size.height, 0.5f)
+    }
+
+    @Test
+    @Config(qualifiers = "w915dp-h369dp-land")
+    fun inLandscapeTheMarkFollowsTheScrollFromTheFirstModeToTheLast() {
+        showDashcamPicker("Daytime mode")
+        assertEquals(listOf(bottomEdge), scrollEdgesShown())
+
+        composeRule.onNode(isRadio and inDialog and hasText("Off")).performScrollTo()
+        composeRule.waitForIdle()
+        assertEquals(listOf(topEdge), scrollEdgesShown())
+    }
+
+    @Test
+    fun inPortraitWhereEveryModeFitsTheDashcamDaytimePickerShowsNoMark() {
+        prefs.dashcamOwnership = DashcamOwnership.YES
+        prefs.autoLightModeEnabled = true
+        openPicker("Daytime mode")
+
+        assertEquals(CameraLightMode.entries.size, radioRows().size)
+        assertEquals(emptyList<String>(), scrollEdgesShown())
     }
 
     @Test

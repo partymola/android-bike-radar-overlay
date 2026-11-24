@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,10 +16,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -30,11 +35,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -598,25 +606,49 @@ internal fun <T> RadioPickerDialog(
         onDismissRequest = onDismiss,
         title = { Text(title, fontSize = 16.sp) },
         text = {
-            Column(modifier = Modifier.selectableGroup()) {
-                options.forEach { option ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .selectable(selected = option == current, role = Role.RadioButton, onClick = { onSelect(option) })
-                            .padding(vertical = 10.dp, horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        RadioButton(selected = option == current, onClick = null)
-                        Text(text = label(option), fontSize = 14.sp)
+            // Opened at the top, a short landscape dialog can hide the checked row
+            // (`inLandscapeTheDashcamDaytimePickerOpensWithItsDefaultInView`).
+            val currentInView = remember { BringIntoViewRequester() }
+            LaunchedEffect(Unit) { currentInView.bringIntoView() }
+            val scrollState = rememberScrollState()
+            Box {
+                Column(modifier = Modifier.selectableGroup().verticalScroll(scrollState)) {
+                    options.forEach { option ->
+                        Row(
+                            modifier = Modifier
+                                .then(if (option == current) Modifier.bringIntoViewRequester(currentInView) else Modifier)
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .selectable(selected = option == current, role = Role.RadioButton, onClick = { onSelect(option) })
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            RadioButton(selected = option == current, onClick = null)
+                            Text(text = label(option), fontSize = 14.sp)
+                        }
                     }
                 }
+                // Compose draws no scrollbar: a hairline on an edge says more modes
+                // lie past it (SettingsLightsModePickerSemanticsTest).
+                if (scrollState.canScrollBackward) ScrollEdgeHairline("radioPickerTopDivider", Alignment.TopCenter)
+                if (scrollState.canScrollForward) ScrollEdgeHairline("radioPickerBottomDivider", Alignment.BottomCenter)
             }
         },
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
+    )
+}
+
+@Composable
+private fun BoxScope.ScrollEdgeHairline(tag: String, edge: Alignment) {
+    Box(
+        modifier = Modifier
+            .align(edge)
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(LocalBrColors.current.hairline)
+            .testTag(tag),
     )
 }
 

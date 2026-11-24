@@ -9,6 +9,8 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
@@ -16,6 +18,7 @@ import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.rememberNavController
 import androidx.test.core.app.ApplicationProvider
 import es.jjrh.bikeradar.CameraLightMode
@@ -32,6 +35,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * What a screen reader is told about the light-mode pickers on the shipped
@@ -39,12 +43,15 @@ import org.robolectric.RobolectricTestRunner
  * button carrying whether it is the current mode, and every row must sit
  * directly in one selectable group. Read from the unmerged tree, which is
  * where TalkBack finds a row's role and state. No golden can see any of it.
+ * Native graphics: under the legacy mode a row measures 56 dp whatever its
+ * minimum, so the 48 dp check could not fail.
  *
  * Each picker is opened with a stored mode that is not the pref's default,
  * and the two pickers of each kind with modes at different positions, so a
  * selection keyed to a fixed mode or position cannot pass.
  */
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SettingsLightsModePickerSemanticsTest {
 
     @get:Rule val composeRule = createComposeRule()
@@ -102,6 +109,16 @@ class SettingsLightsModePickerSemanticsTest {
         assertEquals(List(entries) { group.id }, radioRows().map { it.parent?.id })
     }
 
+    private fun assertEveryRowIsTallEnoughToHit(entries: Int) {
+        val rows = composeRule.onAllNodes(isRadio and inDialog, useUnmergedTree = true)
+        repeat(entries) { rows[it].assertHeightIsAtLeast(48.dp) }
+    }
+
+    private fun assertModeRows(daytime: String, night: String) {
+        modeRow("Daytime mode").assert(hasText(daytime))
+        modeRow("Night mode").assert(hasText(night))
+    }
+
     private fun assertPickerClosed() {
         assertEquals(0, composeRule.onAllNodes(isDialog()).fetchSemanticsNodes().size)
     }
@@ -151,6 +168,7 @@ class SettingsLightsModePickerSemanticsTest {
             dialogRadios(),
         )
         assertOneGroupHoldsEveryRow(RadarLightMode.entries.size)
+        assertEveryRowIsTallEnoughToHit(RadarLightMode.entries.size)
     }
 
     @Test
@@ -178,6 +196,7 @@ class SettingsLightsModePickerSemanticsTest {
             dialogRadios(),
         )
         assertOneGroupHoldsEveryRow(CameraLightMode.entries.size)
+        assertEveryRowIsTallEnoughToHit(CameraLightMode.entries.size)
     }
 
     @Test
@@ -198,17 +217,19 @@ class SettingsLightsModePickerSemanticsTest {
     }
 
     @Test
-    fun choosingARadarModeSavesItAndClosesThePicker() {
+    fun choosingARadarDaytimeModeChangesOnlyTheDaytimeMode() {
         showRadarPicker("Daytime mode")
         composeRule.onNode(isRadio and inDialog and hasText("Peloton")).performClick()
         composeRule.waitForIdle()
 
         assertEquals(RadarLightMode.PELOTON, prefs.radarLightDayMode)
+        assertEquals(RadarLightMode.OFF, prefs.radarLightNightMode)
         assertPickerClosed()
+        assertModeRows(daytime = "Peloton", night = "Off - switched at local sunset")
     }
 
     @Test
-    fun choosingARadarNightModeSavesOnlyTheNightMode() {
+    fun choosingARadarNightModeChangesOnlyTheNightMode() {
         showRadarPicker("Night mode")
         composeRule.onNode(isRadio and inDialog and hasText("Peloton")).performClick()
         composeRule.waitForIdle()
@@ -216,10 +237,11 @@ class SettingsLightsModePickerSemanticsTest {
         assertEquals(RadarLightMode.PELOTON, prefs.radarLightNightMode)
         assertEquals(RadarLightMode.SOLID, prefs.radarLightDayMode)
         assertPickerClosed()
+        assertModeRows(daytime = "Solid", night = "Peloton - switched at local sunset")
     }
 
     @Test
-    fun choosingADashcamDaytimeModeSavesOnlyTheDaytimeMode() {
+    fun choosingADashcamDaytimeModeChangesOnlyTheDaytimeMode() {
         showDashcamPicker("Daytime mode")
         composeRule.onNode(isRadio and inDialog and hasText("Medium")).performClick()
         composeRule.waitForIdle()
@@ -227,15 +249,18 @@ class SettingsLightsModePickerSemanticsTest {
         assertEquals(CameraLightMode.MEDIUM, prefs.cameraLightDayMode)
         assertEquals(CameraLightMode.NIGHT_FLASH, prefs.cameraLightNightMode)
         assertPickerClosed()
+        assertModeRows(daytime = "Medium", night = "Night flash - switched at local sunset")
     }
 
     @Test
-    fun choosingADashcamModeSavesItAndClosesThePicker() {
+    fun choosingADashcamNightModeChangesOnlyTheNightMode() {
         showDashcamPicker("Night mode")
         composeRule.onNode(isRadio and inDialog and hasText("Off")).performClick()
         composeRule.waitForIdle()
 
         assertEquals(CameraLightMode.OFF, prefs.cameraLightNightMode)
+        assertEquals(CameraLightMode.HIGH, prefs.cameraLightDayMode)
         assertPickerClosed()
+        assertModeRows(daytime = "High", night = "Off - switched at local sunset")
     }
 }

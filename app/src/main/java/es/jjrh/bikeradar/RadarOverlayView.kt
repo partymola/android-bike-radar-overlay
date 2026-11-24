@@ -12,10 +12,10 @@ import kotlin.math.roundToInt
 
 class RadarOverlayView(context: Context) : View(context) {
 
-    // Cached once: dp() is called ~20x per onDraw (and per vehicle), and the
-    // only thing it needed from resources was the display density, which does
-    // not change for a fixed-screen overlay during a session. Declared first
-    // so the paint initializers below, which call dp() at construction, see it.
+    // Taken once per view: dp() runs ~20x per onDraw. A density change reaches
+    // the window's width through the host, and this drawing only from the next
+    // view built. Declared first so the paint initializers below, which call
+    // dp() at construction, see it.
     private val density = resources.displayMetrics.density
 
     // The Canvas overlay is otherwise invisible to accessibility services.

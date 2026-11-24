@@ -74,7 +74,7 @@ class CorpusReplayGate {
 
     private val unconfidentWait = System.getProperty("bikeradar.corpusUnconfidentWait") == "true"
     private val mirror = System.getProperty("bikeradar.corpusMirror") == "true"
-    private val compareOnlyMode = compareOnlyMode(unconfidentWait, mirror)
+    private val compareOnlyMode = compareOnlyMode(unconfidentWait = unconfidentWait, mirror = mirror)
 
     private data class Tally(
         var beep1: Int = 0,

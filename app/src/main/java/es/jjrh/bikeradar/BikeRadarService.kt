@@ -256,7 +256,7 @@ class BikeRadarService : Service() {
 
     // Overlay window + view ownership lives in AndroidOverlayHost; the
     // service forwards onConfigurationChanged so the host re-issues the
-    // window parameters, whose dp width follows a new density.
+    // window parameters, keeping the window's dp width at a new density.
     @androidx.annotation.VisibleForTesting
     internal lateinit var overlayHost: AndroidOverlayHost
         private set

@@ -14,8 +14,9 @@ import android.view.WindowManager
  * Production [OverlayHost] backed by the Android [WindowManager]. Tracks the
  * attached view and lays it out from its [OverlayGeometry] on attach, on
  * [setGeometry] and after a configuration change ([onConfigurationChanged]),
- * which re-issues the window parameters so the dp width follows a new
- * density. The view's drawing keeps the density it was built with.
+ * which re-issues the window parameters so the window keeps its dp width at a
+ * new density, its pixel width recomputed. The view's drawing keeps the
+ * density it was built with.
  *
  * Main thread only.
  */
@@ -25,7 +26,7 @@ internal class AndroidOverlayHost(
     private val wm: WindowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager,
 ) : OverlayHost {
 
-    @Volatile private var attachedView: RadarOverlayView? = null
+    private var attachedView: RadarOverlayView? = null
 
     override fun createView(): RadarOverlayView = RadarOverlayView(context)
 

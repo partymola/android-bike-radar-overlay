@@ -14,7 +14,6 @@ import es.jjrh.bikeradar.data.Prefs
 import es.jjrh.bikeradar.testutil.InMemoryCryptor
 import org.junit.After
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -22,6 +21,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
@@ -131,12 +131,14 @@ class OverlayGeometryServiceTest {
     }
 
     @Test
-    fun aConfigurationChangeReLaysOutBothWindows() {
+    fun aDensityChangeReLaysOutBothWindowsAtTheirOwnWidths() {
+        prefs.overlayNarrow = true
         val w = start()
-        val strip = w.strip.params()
-        val banner = w.banner.params()
+        assertEquals(240, w.strip.params().width)
+        assertEquals(390, w.banner.params().width)
+        RuntimeEnvironment.setQualifiers("+xhdpi")
         service!!.onConfigurationChanged(Configuration(app.resources.configuration))
-        assertNotSame(strip, w.strip.params())
-        assertNotSame(banner, w.banner.params())
+        assertEquals(160, w.strip.params().width)
+        assertEquals(260, w.banner.params().width)
     }
 }

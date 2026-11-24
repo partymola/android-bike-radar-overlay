@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.14.0 - 2026-11-24
+
+You can now choose which side of the screen the overlay strip sits on, and make it narrower. Both are in Settings, under Alerts, in the Overlay section. The overlay also now ends above your phone's navigation bar, so the battery and dashcam warnings at its bottom show in full.
+
+### While you ride
+
+- **An overlay that fits your screen**
+  - The overlay now ends above your phone's navigation or gesture bar, so the battery and dashcam warnings at its bottom show in full.
+
+### In Settings
+
+- **Where the overlay sits**
+  - Screen side puts the overlay on the left or the right of the screen. It helps where traffic passes on your left, or when the app underneath keeps its buttons on the right.
+  - Narrow overlay makes it about 40% narrower. It suits a radar that reports distance only. With other radars, how far a car is to your side is harder to see.
+- **Easier with TalkBack**
+  - With TalkBack on, the radar and dashcam light-mode choices now say which one is picked.
+  - Settings rows that open a list of choices now say that a double-tap changes them.
+
+### For developers
+
+- The ride-recording replay can run every ride mirrored left to right, to check the beeps do not depend on which side traffic passes.
+
 ## v1.13.0 - 2026-11-22
 
 The app is now available in Polish, and ride history counts roughly how many vehicles passed you as well as those detected behind you. The car behind you is no longer announced twice when a passing car draws level twice. Several Settings and setup texts now match better what the app does.

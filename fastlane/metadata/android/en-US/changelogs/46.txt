@@ -1,0 +1,1 @@
+You can now choose which side of the screen the overlay sits on, and make it narrower (Settings, Alerts, Overlay). The overlay now ends above your phone's navigation bar, so its battery and dashcam warnings show in full. With TalkBack, the light-mode choices say which one is picked.

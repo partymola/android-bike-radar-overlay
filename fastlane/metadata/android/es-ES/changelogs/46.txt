@@ -1,0 +1,1 @@
+Ahora puedes elegir en qué lado de la pantalla va la barra lateral, y hacerla más estrecha (Ajustes, Alertas, Barra lateral). La barra lateral ya termina por encima de la barra de navegación del teléfono, así que sus avisos de batería y de la cámara delantera se ven enteros. Con TalkBack, las opciones de modo de luz dicen cuál está elegida.

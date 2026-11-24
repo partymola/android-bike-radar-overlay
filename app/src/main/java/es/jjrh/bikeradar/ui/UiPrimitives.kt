@@ -11,7 +11,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -502,52 +501,6 @@ fun Telemetry(
                 fontSize = 10.sp,
                 letterSpacing = 1.2.sp,
             )
-        }
-    }
-}
-
-// ── BrSegmentedControl ───────────────────────────────────────────────
-//
-// JSX uses a flex row of buttons inside a small bg-tinted frame. The
-// selected option has bgElev2 fill, others are transparent. Used for
-// the year / month / week selector on the close-pass stats card.
-// Prefixed `Br` for symmetry with the rest of the Br* primitive set
-// even though no current M3 API shadows the bare name.
-
-@Composable
-fun BrSegmentedControl(
-    options: List<Pair<String, String>>, // value -> label
-    selected: String,
-    onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val br = LocalBrColors.current
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(br.bg)
-            .border(1.dp, br.hairline, RoundedCornerShape(6.dp))
-            .padding(2.dp),
-        horizontalArrangement = Arrangement.spacedBy(0.dp),
-    ) {
-        for ((value, label) in options) {
-            val isSelected = value == selected
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(if (isSelected) br.bgElev2 else Color.Transparent)
-                    .clickable { onSelect(value) }
-                    .padding(horizontal = 9.dp, vertical = 5.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = label,
-                    color = if (isSelected) br.fg else br.fgMuted,
-                    fontFamily = FontFamily.Default,
-                    fontWeight = FontWeight.Medium,
-                    fontSize = 11.sp,
-                )
-            }
         }
     }
 }

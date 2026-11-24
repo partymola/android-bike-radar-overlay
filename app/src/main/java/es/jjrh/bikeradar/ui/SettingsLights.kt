@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -38,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
@@ -442,12 +445,12 @@ private fun RadarModePickerDialog(
         onDismissRequest = onDismiss,
         title = { Text(title, fontSize = 16.sp) },
         text = {
-            Column {
+            Column(modifier = Modifier.selectableGroup()) {
                 RadarLightMode.entries.forEach { mode ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onSelect(mode) }
+                            .selectable(selected = mode == current, role = Role.RadioButton, onClick = { onSelect(mode) })
                             .padding(vertical = 10.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -474,12 +477,12 @@ private fun DashcamModePickerDialog(
         onDismissRequest = onDismiss,
         title = { Text(title, fontSize = 16.sp) },
         text = {
-            Column {
+            Column(modifier = Modifier.selectableGroup()) {
                 CameraLightMode.entries.forEach { mode ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onSelect(mode) }
+                            .selectable(selected = mode == current, role = Role.RadioButton, onClick = { onSelect(mode) })
                             .padding(vertical = 10.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),

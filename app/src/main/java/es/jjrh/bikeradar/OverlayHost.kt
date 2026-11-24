@@ -32,8 +32,10 @@ internal interface OverlayHost {
     fun detach(view: RadarOverlayView)
 
     /** Re-apply window-manager layout params for the currently-attached
-     *  view (rotation handler). No-op if nothing is attached. The host owns
-     *  the LayoutParams construction so the service doesn't need to. */
+     *  view after a configuration change, so the window's dp width follows
+     *  a new density; the view's drawing does not. No-op if nothing is
+     *  attached. The host owns the LayoutParams construction so the service
+     *  doesn't need to. */
     fun onConfigurationChanged()
 }
 

@@ -30,6 +30,7 @@ class DebugOverlayServiceWindowTest {
         val params = shadow.views.single().layoutParams as WindowManager.LayoutParams
         assertEquals(0x35, params.gravity)
         assertEquals(390, params.width)
+        assertEquals(-1, params.height)
         assertEquals(2038, params.type)
 
         controller.destroy()

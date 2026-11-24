@@ -77,10 +77,12 @@ fixture host `homeassistant.local:8123`, a masked token and no device names.
 Most are whole screens at 1344x2991. The exception is the overlay strip alone
 at 390x2991, `RadarOverlayViewTest.multipleVehicles`, the one published image
 that is not a whole screen: it is the README hero and store slot 2 in both
-locales. Overlay goldens render the landscape strip a mounted phone shows
-(390x1185, a 395 dp short side) unless the test asks for portrait, and only
-this one is published. Store slot 1 is the home screen, so do not re-copy the
-strip into it.
+locales. Overlay goldens render the landscape strip a mounted phone shows,
+the wide one 390x1185 and the narrow one 240x1185, unless the test asks for
+portrait; with gesture navigation the strip ends above the bar, about 24 dp
+shorter (a bottom 3-button bar takes more). Of those goldens only
+`multipleVehicles` is published.
+Store slot 1 is the home screen, so do not re-copy the strip into it.
 
 **Re-copy rather than re-capture.** No published image is a device capture: a
 capture is 1344x2992, one pixel taller, and would carry the rider's real Home
@@ -263,8 +265,9 @@ side.
   Experimental unconfident wait on; it is compare-only, and its diff is what
   the wait changes. Check that the result line says the wait was on.
   `-Pbikeradar.corpusMirror=true` replays every ride mirrored left to right,
-  also compare-only: a clean run means the cues do not depend on which side
-  traffic passes. Its result line says "mirrored".
+  also compare-only: a clean run means each ride's cue counts are unchanged
+  when mirrored (the decoder's own gates still see the ride unmirrored). Its
+  result line says "mirrored".
   - **The path must be the one Gradle sees, not the one your shell sees.**
     Gradle runs inside the build container with the repo mounted at
     `/workspace`, so a host path resolves to nothing there. A missing

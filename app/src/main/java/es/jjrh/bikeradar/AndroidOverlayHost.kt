@@ -12,8 +12,9 @@ import android.view.WindowManager
 
 /**
  * Production [OverlayHost] backed by the Android [WindowManager]. Tracks the
- * attached view and lays it out from its [OverlayGeometry] on attach, on
- * rotation ([onConfigurationChanged]) and on [setGeometry].
+ * attached view and lays it out from its [OverlayGeometry] on attach, on a
+ * configuration change such as a display density change
+ * ([onConfigurationChanged]) and on [setGeometry].
  */
 internal class AndroidOverlayHost(
     private val context: Context,
@@ -69,7 +70,7 @@ internal class AndroidOverlayHost(
         }
     }
 
-    private fun params() = geometry.layoutParams(wm, context.resources.displayMetrics.density)
+    private fun params() = geometry.layoutParams(context.resources.displayMetrics.density)
 
     private companion object {
         private const val TAG = "BikeRadar.OverlayHost"

@@ -3,13 +3,10 @@
 package es.jjrh.bikeradar
 
 import android.content.Context
-import android.graphics.Rect
 import android.view.Display
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowInsets
 import android.view.WindowManager
-import android.view.WindowMetrics
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
@@ -28,24 +25,26 @@ class AndroidOverlayHostTest {
 
     @Test
     fun theWindowIsAnUntouchableTranslucentOverlayClearOfTheCutout() {
-        val p = OverlayGeometry(OverlayEdge.RIGHT, 130).layoutParams(wm, 3.0f)
+        val p = OverlayGeometry(OverlayEdge.RIGHT, 130).layoutParams(3.0f)
         assertEquals(2038, p.type)
         assertEquals(0x8 or 0x10 or 0x100, p.flags)
         assertEquals(-3, p.format)
         assertEquals(0, p.layoutInDisplayCutoutMode)
         assertEquals(0, p.x)
         assertEquals(0, p.y)
-        assertEquals(2992, p.height)
+        assertEquals(-1, p.height)
     }
 
     @Test
     fun theParamsFollowTheGeometry() {
-        val right = OverlayGeometry(OverlayEdge.RIGHT, 130).layoutParams(wm, 3.0f)
+        val right = OverlayGeometry(OverlayEdge.RIGHT, 130).layoutParams(3.0f)
         assertEquals(0x35, right.gravity)
         assertEquals(390, right.width)
-        val left = OverlayGeometry(OverlayEdge.LEFT, 80).layoutParams(wm, 2.625f)
+        assertEquals(-1, right.height)
+        val left = OverlayGeometry(OverlayEdge.LEFT, 80).layoutParams(2.625f)
         assertEquals(0x33, left.gravity)
         assertEquals(210, left.width)
+        assertEquals(-1, left.height)
     }
 
     @Test
@@ -58,6 +57,7 @@ class AndroidOverlayHostTest {
         assertSame(view, add.view)
         assertEquals(0x33, add.params.gravity)
         assertEquals(240, add.params.width)
+        assertEquals(-1, add.params.height)
     }
 
     @Test
@@ -71,6 +71,7 @@ class AndroidOverlayHostTest {
         assertSame(view, update.view)
         assertEquals(0x33, update.params.gravity)
         assertEquals(240, update.params.width)
+        assertEquals(-1, update.params.height)
     }
 
     @Test
@@ -87,16 +88,6 @@ class AndroidOverlayHostTest {
         val host = AndroidOverlayHost(context, wm = wm)
         host.attach(host.createView())
         assertEquals(260, wm.calls.single().params.width)
-    }
-
-    @Test
-    fun rotationReadsTheWindowHeightAgain() {
-        val host = AndroidOverlayHost(context, wm = wm)
-        host.attach(host.createView())
-        assertEquals(2992, wm.calls.single().params.height)
-        wm.heightPx = 1344
-        host.onConfigurationChanged()
-        assertEquals(1344, wm.calls.last().params.height)
     }
 
     @Test
@@ -134,7 +125,7 @@ class AndroidOverlayHostTest {
     }
 
     @Test
-    fun rotationKeepsTheChangedGeometry() {
+    fun aConfigurationChangeKeepsTheChangedGeometry() {
         val host = AndroidOverlayHost(context, wm = wm)
         host.attach(host.createView())
         host.setGeometry(OverlayGeometry(OverlayEdge.LEFT, 80))
@@ -180,7 +171,6 @@ class AndroidOverlayHostTest {
         var failAdds = false
         var failUpdates = false
         var failRemoves = false
-        var heightPx = WINDOW_HEIGHT_PX
 
         override fun addView(view: View, params: ViewGroup.LayoutParams) {
             if (failAdds) throw WindowManager.BadTokenException("permission denied for window type 2038")
@@ -199,13 +189,7 @@ class AndroidOverlayHostTest {
 
         override fun removeViewImmediate(view: View) = removeView(view)
 
-        override fun getCurrentWindowMetrics(): WindowMetrics = WindowMetrics(Rect(0, 0, 1344, heightPx), WindowInsets.Builder().build())
-
         @Deprecated("Unused by the host")
         override fun getDefaultDisplay(): Display = throw UnsupportedOperationException()
-    }
-
-    private companion object {
-        const val WINDOW_HEIGHT_PX = 2992
     }
 }

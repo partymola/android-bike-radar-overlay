@@ -22,9 +22,11 @@ internal data class OverlayGeometry(
 
     fun widthPx(density: Float): Int = (widthDp * density).toInt()
 
-    fun layoutParams(wm: WindowManager, density: Float): WindowManager.LayoutParams = WindowManager.LayoutParams(
+    fun layoutParams(density: Float): WindowManager.LayoutParams = WindowManager.LayoutParams(
         widthPx(density),
-        wm.currentWindowMetrics.bounds.height(),
+        // Not the display height: the view would be measured at it while the frame stops at the navigation bar,
+        // drawing its bottom off-screen. AndroidOverlayHostTest pins the -1; only a device shows the clipping.
+        WindowManager.LayoutParams.MATCH_PARENT,
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
             WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or

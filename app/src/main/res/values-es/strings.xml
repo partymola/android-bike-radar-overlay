@@ -25,10 +25,15 @@
     <!-- Estado que lee TalkBack en una fila que abre y cierra una lista. -->
     <string name="common_expanded">Desplegado</string>
     <string name="common_collapsed">Contraído</string>
-    <!-- Lo que hace una fila que abre un selector, tal como TalkBack lo lee
-         dentro de su frase "toca dos veces para %s": infinitivo en minúscula,
-         no la etiqueta de un botón (esa es common_change). -->
+    <!-- Lo que hace un toque, tal como TalkBack lo lee dentro de su frase
+         "toca dos veces para %s": infinitivo en minúscula, nunca la etiqueta
+         de un botón como common_change. -->
     <string name="a11y_action_change">cambiar</string>
+    <string name="a11y_action_stop_sharing">dejar de compartir</string>
+    <string name="a11y_action_open_bluetooth_settings">abrir los ajustes de Bluetooth</string>
+    <string name="a11y_action_open_flow">abrir Bosch Flow</string>
+    <string name="a11y_action_clear_saved_dashcam">borrar la cámara guardada</string>
+    <string name="a11y_action_choose_dashcam">elegir la cámara</string>
 
     <!-- Primitivas de UI (UiPrimitives.kt) -->
     <string name="ui_battery_pct"><xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
@@ -525,8 +530,9 @@
          configuración, cualquiera salvo una cámara delantera, la cámara
          guardada y la eBike. -->
     <string name="settings_radardev_tap_to_use_as_radar">Toca para usarlo como radar</string>
-    <string name="settings_radardev_show_devices">Mostrar dispositivos emparejados</string>
-    <string name="settings_radardev_hide_devices">Ocultar dispositivos emparejados</string>
+    <!-- Solo etiquetas de toque de TalkBack: infinitivo en minúscula, como a11y_action_change. -->
+    <string name="settings_radardev_show_devices">mostrar dispositivos emparejados</string>
+    <string name="settings_radardev_hide_devices">ocultar dispositivos emparejados</string>
     <string name="settings_radardev_section_actions">Acciones</string>
     <string name="settings_radardev_pair_different_title">Emparejar un radar distinto</string>
     <string name="settings_radardev_open">Abrir</string>
@@ -709,7 +715,8 @@
     <!-- Ajustes → Licencias de código abierto (SettingsLicenses.kt). Los nombres
          de bibliotecas, autores y nombres de licencia SPDX quedan sin traducir como atribución legal. -->
     <string name="settings_licenses_title">Licencias de código abierto</string>
-    <string name="settings_licenses_open_action">Abrir la licencia</string>
+    <!-- Solo etiqueta de toque de TalkBack: infinitivo en minúscula, como a11y_action_change. -->
+    <string name="settings_licenses_open_action">abrir la licencia</string>
     <string name="settings_licenses_intro">El propio Bike Radar es GPL-3.0-or-later. Abajo aparece cada biblioteca de terceros de la que la app depende directamente, con su licencia, y todas son compatibles con GPL-3.0.</string>
     <string name="settings_licenses_section_language_runtime">Lenguaje y runtime</string>
     <string name="settings_licenses_section_android_platform">Plataforma Android</string>

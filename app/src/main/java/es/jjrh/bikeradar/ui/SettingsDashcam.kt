@@ -205,6 +205,7 @@ internal fun SettingsDashcamContent(
                         subtitle = dashcamDisplayName ?: dashcamMac,
                         actionLabel = stringResource(R.string.settings_dashcam_clear),
                         onAction = onClearSavedClick,
+                        clickLabel = stringResource(R.string.a11y_action_clear_saved_dashcam),
                     )
                 }
             }
@@ -308,7 +309,7 @@ internal fun SettingsDashcamContent(
                                 .clip(RoundedCornerShape(8.dp))
                                 .border(1.dp, br.hairline2, RoundedCornerShape(8.dp))
                                 .clickable(
-                                    onClickLabel = stringResource(R.string.dashcam_picker_title),
+                                    onClickLabel = stringResource(R.string.a11y_action_choose_dashcam),
                                     role = Role.Button,
                                     onClick = onPickDeviceClick,
                                 )

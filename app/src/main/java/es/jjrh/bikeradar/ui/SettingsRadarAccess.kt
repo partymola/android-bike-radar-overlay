@@ -155,6 +155,7 @@ fun SettingsRadarAccessContent(
                         ).joinToString(" · "),
                         actionLabel = stringResource(R.string.settings_radar_access_revoke),
                         onAction = { pendingRevoke = grant },
+                        clickLabel = stringResource(R.string.a11y_action_stop_sharing),
                         isLast = index == grants.lastIndex,
                         actionIcon = Icons.Default.Delete,
                         actionTint = br.danger,

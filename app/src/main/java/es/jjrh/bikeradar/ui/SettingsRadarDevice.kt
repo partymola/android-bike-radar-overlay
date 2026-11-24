@@ -461,6 +461,7 @@ internal fun SettingsRadarDeviceContent(
                     title = stringResource(R.string.settings_radardev_pair_different_title),
                     actionLabel = stringResource(R.string.settings_radardev_open),
                     onAction = onPairDifferent,
+                    clickLabel = stringResource(R.string.a11y_action_open_bluetooth_settings),
                     subtitle = stringResource(R.string.settings_radardev_pair_different_subtitle),
                 )
             }

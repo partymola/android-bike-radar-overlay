@@ -257,6 +257,7 @@ internal fun SettingsEBikeContent(
                         subtitle = stringResource(R.string.settings_ebike_open_flow_subtitle),
                         actionLabel = stringResource(R.string.settings_ebike_open),
                         onAction = onOpenFlow,
+                        clickLabel = stringResource(R.string.a11y_action_open_flow),
                     )
                 }
 

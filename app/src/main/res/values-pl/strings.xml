@@ -33,10 +33,15 @@
     <!-- TalkBack state of a row that opens and closes a list in place. -->
     <string name="common_expanded">Rozwinięte</string>
     <string name="common_collapsed">Zwinięte</string>
-    <!-- What a row that opens a picker does, as TalkBack reads it inside its
-         own "double-tap to %s" phrase: a lowercase infinitive, not a button
-         label (that is common_change). -->
+    <!-- What a tap does, as TalkBack reads it inside its own "double-tap to
+         %s" phrase: a lowercase infinitive, never a button label such as
+         common_change. -->
     <string name="a11y_action_change">zmienić</string>
+    <string name="a11y_action_stop_sharing">zatrzymać udostępnianie</string>
+    <string name="a11y_action_open_bluetooth_settings">otworzyć ustawienia Bluetooth</string>
+    <string name="a11y_action_open_flow">otworzyć Bosch Flow</string>
+    <string name="a11y_action_clear_saved_dashcam">wyczyścić zapisaną kamerę</string>
+    <string name="a11y_action_choose_dashcam">wybrać kamerę</string>
     <!-- UI primitives (UiPrimitives.kt) -->
     <string name="ui_battery_pct">
         <xliff:g id="pct" example="85">%1$d</xliff:g>%%</string>
@@ -616,8 +621,9 @@
          does not know as a radar, such as a watch; in setup any device but a
          front camera, the saved dashcam and the eBike. -->
     <string name="settings_radardev_tap_to_use_as_radar">Dotknij, aby używać jako radaru</string>
-    <string name="settings_radardev_show_devices">Pokaż sparowane urządzenia</string>
-    <string name="settings_radardev_hide_devices">Ukryj sparowane urządzenia</string>
+    <!-- TalkBack click labels only: lowercase infinitives, like a11y_action_change. -->
+    <string name="settings_radardev_show_devices">pokazać sparowane urządzenia</string>
+    <string name="settings_radardev_hide_devices">ukryć sparowane urządzenia</string>
     <string name="settings_radardev_section_actions">Działania</string>
     <string name="settings_radardev_pair_different_title">Sparuj inny radar</string>
     <string name="settings_radardev_open">Otwórz</string>
@@ -811,7 +817,8 @@
     <!-- Settings → Open source licences (SettingsLicenses.kt). Library names,
          authors and SPDX licence names stay hardcoded as legal attribution. -->
     <string name="settings_licenses_title">Licencje open source</string>
-    <string name="settings_licenses_open_action">Otwórz licencję</string>
+    <!-- A TalkBack click label only: a lowercase infinitive, like a11y_action_change. -->
+    <string name="settings_licenses_open_action">otworzyć licencję</string>
     <string name="settings_licenses_intro">Bike Radar jest objęty licencją GPL-3.0-or-later. Poniżej wymieniono wszystkie bezpośrednio wykorzystywane biblioteki zewnętrzne i ich licencje, zgodne z GPL-3.0.</string>
     <string name="settings_licenses_section_language_runtime">Język i środowisko uruchomieniowe</string>
     <string name="settings_licenses_section_android_platform">Platforma Android</string>

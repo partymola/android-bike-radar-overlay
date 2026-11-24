@@ -420,7 +420,6 @@ fun BrOutlinedButton(
             .border(1.dp, borderColor, RoundedCornerShape(10.dp))
             .clickable(
                 enabled = enabled,
-                onClickLabel = label,
                 role = Role.Button,
                 onClick = onClick,
             ),
@@ -480,6 +479,9 @@ fun SettingsActionRow(
     title: String,
     actionLabel: String,
     onAction: () -> Unit,
+    /** What TalkBack says a tap does, inside its own "double-tap to %s": a
+     *  lowercase infinitive, never [actionLabel] (`ClickLabelTest`). */
+    clickLabel: String,
     subtitle: String? = null,
     isLast: Boolean = true,
     actionIcon: ImageVector? = null,
@@ -547,7 +549,7 @@ fun SettingsActionRow(
                     .clip(RoundedCornerShape(8.dp))
                     .border(1.dp, br.hairline2, RoundedCornerShape(8.dp))
                     .clickable(
-                        onClickLabel = actionLabel,
+                        onClickLabel = clickLabel,
                         role = Role.Button,
                         onClick = onAction,
                     )
@@ -556,10 +558,10 @@ fun SettingsActionRow(
             ) {
                 if (actionIcon != null) {
                     // The label still reaches a screen reader through the
-                    // icon's description and the click label above, so the
-                    // affordance loses width rather than meaning. Worth it
-                    // where the title beside it is an app name that would
-                    // otherwise be squeezed to a few characters.
+                    // icon's description, so the affordance loses width
+                    // rather than meaning. Worth it where the title beside it
+                    // is an app name that would otherwise be squeezed to a
+                    // few characters.
                     Icon(
                         imageVector = actionIcon,
                         contentDescription = actionLabel,

@@ -69,7 +69,7 @@ class SettingsDashcamChipTest {
         val chip = composeRule.onNodeWithText(label)
         chip.assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
         val node = chip.fetchSemanticsNode()
-        assertEquals("Select dashcam", node.config.getOrNull(SemanticsActions.OnClick)?.label)
+        assertEquals("choose your dashcam", node.config.getOrNull(SemanticsActions.OnClick)?.label)
         // The chip is drawn under 48 dp and relies on Compose extending a
         // clickable's touch target to 48 dp: the reported bounds, and a real
         // tap landing 5 dp above the drawn edge.

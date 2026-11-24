@@ -264,12 +264,15 @@ class BikeRadarService : Service() {
     // Second overlay host for the service-owned "reconnecting" banner shown
     // while the rear-radar link is down (the per-connection pipeline and its
     // view are torn down during the drop, so this is a separate surface).
-    // Driven off RadarLinkVisualDecider from the walk-away tick. The view ref
-    // is touched only on the main thread (show/hide dispatch to Main).
+    // Driven off RadarLinkVisualDecider from the walk-away tick, applied on
+    // the main thread by [reconnectBanner].
     @androidx.annotation.VisibleForTesting
     internal lateinit var reconnectHost: AndroidOverlayHost
         private set
-    private var reconnectBannerView: RadarOverlayView? = null
+
+    @androidx.annotation.VisibleForTesting
+    internal lateinit var reconnectBanner: ReconnectBanner
+        private set
 
     // Pipeline orchestrates the per-frame combine(RadarStateBus +
     // BatteryStateBus + ticker) loop that drives the overlay view, the
@@ -455,6 +458,12 @@ class BikeRadarService : Service() {
         val overlaySettings = overlayPrefs
         overlayHost = AndroidOverlayHost(this, OverlayGeometry.strip(overlaySettings.overlayOnLeft, overlaySettings.overlayNarrow))
         reconnectHost = AndroidOverlayHost(this, OverlayGeometry.banner(overlaySettings.overlayOnLeft))
+        reconnectBanner = ReconnectBanner(
+            host = reconnectHost,
+            radarStreaming = { radarLinkCoordinator.snapshot().radarStreaming },
+            clog = ::clog,
+            journal = linkJournal::log,
+        )
         // On Main, the only thread setGeometry may run on; the snapshots are
         // built off Main.
         scope.launch(Dispatchers.Main) {
@@ -853,10 +862,7 @@ class BikeRadarService : Service() {
         unregisterEventScan()
         if (::radarLink.isInitialized) radarLink.shutdown()
         RadarStateBus.clear()
-        if (::reconnectHost.isInitialized) {
-            reconnectBannerView?.let { reconnectHost.detach(it) }
-            reconnectBannerView = null
-        }
+        if (::reconnectBanner.isInitialized) reconnectBanner.remove()
         if (::walkAwayAlarm.isInitialized) walkAwayAlarm.shutdown()
         alertBeeper?.release()
         alertBeeper = null
@@ -1300,34 +1306,9 @@ class BikeRadarService : Service() {
         )
     }
 
-    /** Show/hide/retitle the service-owned dead-radar banner per the
-     *  [RadarLinkVisualDecider.LinkVisual]. Idempotent; all WindowManager work
-     *  runs on the main thread, where the view ref is the only reader/writer (so
-     *  no extra synchronisation). LIVE detaches; a non-LIVE variant attaches a
-     *  fresh overlay (or updates the message on an already-attached one, e.g. a
-     *  late eBike snapshot flipping PLAIN -> UNLOCKED). canDrawOverlays is
-     *  re-checked for the permission TOCTOU, mirroring the pipeline's attach. */
+    /** Called from the tick and the radar's first frame, both off Main. */
     private fun setReconnectBanner(visual: RadarLinkVisualDecider.LinkVisual) {
-        scope.launch(Dispatchers.Main) {
-            val current = reconnectBannerView
-            if (visual != RadarLinkVisualDecider.LinkVisual.LIVE) {
-                if (current == null) {
-                    if (!reconnectHost.canDrawOverlays()) return@launch
-                    val v = reconnectHost.createView()
-                    v.setReconnecting(visual)
-                    if (reconnectHost.attach(v) == null) {
-                        reconnectBannerView = v
-                        clog("# reconnect_banner shown variant=$visual")
-                    }
-                } else {
-                    current.setReconnecting(visual)
-                }
-            } else if (current != null) {
-                reconnectBannerView = null
-                reconnectHost.detach(current)
-                clog("# reconnect_banner hidden")
-            }
-        }
+        scope.launch(Dispatchers.Main) { reconnectBanner.show(visual) }
     }
 
     private fun resolveDashcamSlug(): String? {

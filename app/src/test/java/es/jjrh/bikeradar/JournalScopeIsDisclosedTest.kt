@@ -58,6 +58,7 @@ class JournalScopeIsDisclosedTest {
         Writer("RadarLinkController.kt", """journal\("""),
         Writer("CameraLightLinkController.kt", """journal\("""),
         Writer("RideCheckpoint.kt", """journal\("""),
+        Writer("ReconnectBanner.kt", """journal\("""),
         Writer(
             "BikeRadarService.kt",
             """linkJournal\.log\(""",
@@ -72,7 +73,7 @@ class JournalScopeIsDisclosedTest {
     private val readers = setOf("LinkEventJournal.kt", "DebugScreen.kt")
 
     /** Writers the service hands its journal to as a method reference. */
-    private val handedByReference = setOf("RadarLinkCoordinator.kt", "RadarLinkController.kt", "CameraLightLinkController.kt")
+    private val handedByReference = setOf("RadarLinkCoordinator.kt", "RadarLinkController.kt", "CameraLightLinkController.kt", "ReconnectBanner.kt")
 
     /**
      * Each rider-facing event, with the words each locale's connection-log
@@ -178,6 +179,10 @@ class JournalScopeIsDisclosedTest {
         "camera services discovery failed",
         "camera handshake failed at \$handshakeAbort (quick reconnect)",
         "camera handshake complete",
+        // The app's own window failing to go up. No device named and no cue
+        // sounded.
+        "reconnect banner not shown: overlay permission not granted",
+        "reconnect banner not shown: \${error.javaClass.simpleName}",
         "recovered a ride from the crash checkpoint (partial=\${leftover.partial})",
         "service started (unclean restarts=\${prefs.dirtyRestartCount} notifications=\$notificationState)",
         "audio tracks rebuilt after a play failure (gen=\$gen)",

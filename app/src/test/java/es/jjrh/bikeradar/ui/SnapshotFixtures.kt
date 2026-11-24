@@ -25,6 +25,8 @@ internal object SnapshotFixtures {
         alertMaxDistanceM = 20,
         visualMaxDistanceM = 50,
         overlayOpacity = 1.0f,
+        overlayOnLeft = false,
+        overlayNarrow = false,
         radarLongOfflineThresholdMinutes = 30,
         radarLongOfflineCapSec = 30,
         pausedUntilEpochMs = 0L,

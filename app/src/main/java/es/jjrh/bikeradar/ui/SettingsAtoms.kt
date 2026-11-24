@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
@@ -581,7 +582,8 @@ fun SettingsActionRow(
 
 /**
  * A dialog choosing one of [options], each a radio row in one selectable
- * group. SettingsLightsModePickerSemanticsTest pins what TalkBack reads.
+ * group. SettingsLightsModePickerSemanticsTest and SettingsRadarOverlaySideTest
+ * pin what TalkBack reads.
  */
 @Composable
 internal fun <T> RadioPickerDialog(
@@ -601,6 +603,7 @@ internal fun <T> RadioPickerDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .heightIn(min = 48.dp)
                             .selectable(selected = option == current, role = Role.RadioButton, onClick = { onSelect(option) })
                             .padding(vertical = 10.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,

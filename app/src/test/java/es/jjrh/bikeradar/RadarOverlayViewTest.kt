@@ -20,12 +20,15 @@ import org.robolectric.annotation.GraphicsMode
  * [RadarState] and captures the Canvas via Roborazzi (Robolectric Native
  * Graphics) - no device, emulator, or layoutlib, so it runs in cold-cache CI.
  *
- * The view is rendered at its production width (130 dp) and the window's
- * height, which is the strip's length. Fixtures default to a phone in
- * landscape, the way it is mounted on a bike: at the usual view ranges the
- * range axis then has fewer px per metre than the lateral one, which a
- * portrait render cannot show. Portrait renders are kept for the store image
- * and the tall-strip case. Box shapes are asserted in [RadarOverlayDrawnBoxesTest].
+ * The view is rendered at its production width (130 dp, or 80 dp for the
+ * rider's narrow setting) and the screen's full short side as its length.
+ * The production window is MATCH_PARENT tall and stops at the navigation bar,
+ * so on a device the strip can be a little shorter than its golden. Fixtures
+ * default to a phone in landscape, the way it is mounted on a bike: at the
+ * usual view ranges the range axis then has fewer px per metre than the
+ * lateral one, which a portrait render cannot show. Portrait renders, at the
+ * screen's long side, are kept for the store image and the tall-strip case.
+ * Box shapes are asserted in [RadarOverlayDrawnBoxesTest].
  * Verify with `:app:verifyRoborazziDebug`; regenerate with
  * `:app:recordRoborazziDebug`.
  */
@@ -38,12 +41,12 @@ class RadarOverlayViewTest {
 
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
-    /** A measured + laid-out overlay at production width (130 dp), as tall
-     *  as the screen's short side (landscape) or long side ([portrait]).
-     *  Roborazzi draws the view as-is, so it must be sized before capture. */
-    private fun overlay(portrait: Boolean = false): RadarOverlayView {
+    /** A measured + laid-out overlay [widthDp] wide, as tall as the screen's
+     *  short side (landscape) or long side ([portrait]). Roborazzi draws the
+     *  view as-is, so it must be sized before capture. */
+    private fun overlay(portrait: Boolean = false, widthDp: Int = 130): RadarOverlayView {
         val metrics = context.resources.displayMetrics
-        val widthPx = (130 * metrics.density).toInt()
+        val widthPx = (widthDp * metrics.density).toInt()
         val heightPx = if (portrait) metrics.heightPixels else metrics.widthPixels
         return RadarOverlayView(context).apply {
             measure(
@@ -93,14 +96,18 @@ class RadarOverlayViewTest {
         // The full-screen danger BORDER is deliberately absent here: it stays
         // keyed on closing speed, so it can never fire on this source. Read
         // RadarOverlayView's comment before "fixing" that.
-        overlay().apply {
-            setState(
-                RadarState(
-                    vehicles = listOf(Vehicle(id = 1, distanceM = 5, speedMs = 0f, lateralUnknown = true)),
-                    source = DataSource.V1,
-                ),
-            )
-        }.capture()
+        overlay().apply { setState(rangeOnlyState) }.capture()
+    }
+
+    private val rangeOnlyState = RadarState(
+        vehicles = listOf(Vehicle(id = 1, distanceM = 5, speedMs = 0f, lateralUnknown = true)),
+        source = DataSource.V1,
+    )
+
+    @Test
+    fun rangeOnlySourceIsColouredByRangeNarrow() {
+        // The narrow setting is offered for this source above all.
+        overlay(widthDp = 80).apply { setState(rangeOnlyState) }.capture()
     }
 
     @Test
@@ -213,37 +220,48 @@ class RadarOverlayViewTest {
     fun multipleVehicles() {
         // Portrait: this golden is copied as the README and store image.
         overlay(portrait = true).apply {
-            setState(
-                RadarState(
-                    vehicles = listOf(
-                        Vehicle(id = 1, distanceM = 35, speedMs = -8f, lateralPos = -0.3f, templateLengthM = 4f, templateWidthM = 1.75f),
-                        Vehicle(id = 2, distanceM = 18, speedMs = -11f, lateralPos = 0.2f, templateLengthM = 4f, templateWidthM = 1.75f),
-                        Vehicle(id = 3, distanceM = 8, speedMs = -15f, lateralPos = 0.5f, templateLengthM = 4f, templateWidthM = 1.75f),
-                    ),
-                    source = DataSource.V2,
-                    bikeSpeedMs = 5f,
-                ),
-            )
+            setState(multipleVehiclesState)
             setAlertMaxM(20)
         }.capture()
     }
 
     @Test
-    fun mixedVehicleSizes() {
-        overlay().apply {
-            setState(
-                RadarState(
-                    vehicles = listOf(
-                        Vehicle(id = 1, distanceM = 40, speedMs = -6f, size = VehicleSize.CAR),
-                        Vehicle(id = 2, distanceM = 22, speedMs = -10f, size = VehicleSize.CAR),
-                        Vehicle(id = 3, distanceM = 12, speedMs = -14f, size = VehicleSize.TRUCK, templateLengthM = 15f, templateWidthM = 2.25f),
-                    ),
-                    source = DataSource.V2,
-                    bikeSpeedMs = 5f,
-                ),
-            )
+    fun multipleVehiclesNarrow() {
+        overlay(widthDp = 80).apply {
+            setState(multipleVehiclesState)
+            setAlertMaxM(20)
         }.capture()
     }
+
+    private val multipleVehiclesState = RadarState(
+        vehicles = listOf(
+            Vehicle(id = 1, distanceM = 35, speedMs = -8f, lateralPos = -0.3f, templateLengthM = 4f, templateWidthM = 1.75f),
+            Vehicle(id = 2, distanceM = 18, speedMs = -11f, lateralPos = 0.2f, templateLengthM = 4f, templateWidthM = 1.75f),
+            Vehicle(id = 3, distanceM = 8, speedMs = -15f, lateralPos = 0.5f, templateLengthM = 4f, templateWidthM = 1.75f),
+        ),
+        source = DataSource.V2,
+        bikeSpeedMs = 5f,
+    )
+
+    @Test
+    fun mixedVehicleSizes() {
+        overlay().apply { setState(mixedVehicleSizesState) }.capture()
+    }
+
+    @Test
+    fun mixedVehicleSizesNarrow() {
+        overlay(widthDp = 80).apply { setState(mixedVehicleSizesState) }.capture()
+    }
+
+    private val mixedVehicleSizesState = RadarState(
+        vehicles = listOf(
+            Vehicle(id = 1, distanceM = 40, speedMs = -6f, size = VehicleSize.CAR),
+            Vehicle(id = 2, distanceM = 22, speedMs = -10f, size = VehicleSize.CAR),
+            Vehicle(id = 3, distanceM = 12, speedMs = -14f, size = VehicleSize.TRUCK, templateLengthM = 15f, templateWidthM = 2.25f),
+        ),
+        source = DataSource.V2,
+        bikeSpeedMs = 5f,
+    )
 
     @Test
     fun sizedTargetsAreDrawnToScaleFromTheirFront() {
@@ -351,24 +369,21 @@ class RadarOverlayViewTest {
     @Test
     fun alondsideStationary() {
         // Parked car rendered as hollow outline docked to the edge.
-        overlay().apply {
-            setState(
-                RadarState(
-                    vehicles = listOf(
-                        Vehicle(
-                            id = 1,
-                            distanceM = 3,
-                            speedMs = 0f,
-                            lateralPos = 0.9f,
-                            isAlongsideStationary = true,
-                        ),
-                    ),
-                    source = DataSource.V2,
-                    bikeSpeedMs = 1f,
-                ),
-            )
-        }.capture()
+        overlay().apply { setState(alongsideStationaryState) }.capture()
     }
+
+    @Test
+    fun alongsideStationaryNarrow() {
+        overlay(widthDp = 80).apply { setState(alongsideStationaryState) }.capture()
+    }
+
+    private val alongsideStationaryState = RadarState(
+        vehicles = listOf(
+            Vehicle(id = 1, distanceM = 3, speedMs = 0f, lateralPos = 0.9f, isAlongsideStationary = true),
+        ),
+        source = DataSource.V2,
+        bikeSpeedMs = 1f,
+    )
 
     @Test
     fun batteryLow() {
@@ -411,6 +426,15 @@ class RadarOverlayViewTest {
         // The camera-off icon with the radar low and labels on: the icon and
         // the radar's letter beside it.
         overlay().apply {
+            setDashcamStatus(DashcamStatus.Missing, "dc1")
+            setBatteryLow(setOf("rearvue8"), showLabels = true)
+        }.capture()
+    }
+
+    @Test
+    fun dashcamMissingWithRadarLowLabelsOnNarrow() {
+        // The widest glyph group the strip draws, at the narrow width.
+        overlay(widthDp = 80).apply {
             setDashcamStatus(DashcamStatus.Missing, "dc1")
             setBatteryLow(setOf("rearvue8"), showLabels = true)
         }.capture()
@@ -494,15 +518,24 @@ class RadarOverlayViewTest {
     fun alertLineVisible() {
         // Alert threshold line + label visible when alertMaxM < visualMaxM.
         overlay().apply {
-            setState(
-                RadarState(
-                    vehicles = listOf(Vehicle(id = 1, distanceM = 30, speedMs = -9f)),
-                    source = DataSource.V2,
-                    bikeSpeedMs = 5f,
-                ),
-            )
+            setState(alertLineState)
             setAlertMaxM(20)
             setAdaptiveAlerts(false)
         }.capture()
     }
+
+    @Test
+    fun alertLineVisibleNarrow() {
+        overlay(widthDp = 80).apply {
+            setState(alertLineState)
+            setAlertMaxM(20)
+            setAdaptiveAlerts(false)
+        }.capture()
+    }
+
+    private val alertLineState = RadarState(
+        vehicles = listOf(Vehicle(id = 1, distanceM = 30, speedMs = -9f)),
+        source = DataSource.V2,
+        bikeSpeedMs = 5f,
+    )
 }

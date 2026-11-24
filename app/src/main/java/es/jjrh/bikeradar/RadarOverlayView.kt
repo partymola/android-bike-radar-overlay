@@ -145,9 +145,9 @@ class RadarOverlayView(context: Context) : View(context) {
     }
 
     // TextPaint (not Paint) so the banner can wrap via StaticLayout - the
-    // "Rear radar disconnected" / "...but bike unlocked" copy is too long for the
-    // narrow 130dp overlay on one line. Alignment is the layout's (ALIGN_CENTER),
-    // so the paint stays LEFT-aligned.
+    // "Rear radar disconnected" / "...but bike unlocked" copy is too long for one
+    // line of the banner's 130dp window. Alignment is the layout's
+    // (ALIGN_CENTER), so the paint stays LEFT-aligned.
     private val reconnectTitlePaint = android.text.TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         textSize = dp(12f)
         color = COLOR_AMBER
@@ -457,7 +457,7 @@ class RadarOverlayView(context: Context) : View(context) {
         val innerPad = dp(8f)
         val vPad = dp(10f)
         // The radar-only banner is the title alone. Both lines wrap to the
-        // narrow pill via StaticLayout (the copy is too long for one line at 130dp).
+        // pill via StaticLayout (the copy is too long for one line at 130dp).
         val (title, sub) = when (reconnectVisual) {
             RadarLinkVisualDecider.LinkVisual.NO_RADAR -> R.string.overlay_radar_not_on to R.string.overlay_radar_not_on_sub
             RadarLinkVisualDecider.LinkVisual.RECONNECTING_UNLOCKED -> R.string.overlay_radar_disconnected to R.string.overlay_radar_disconnected_unlocked

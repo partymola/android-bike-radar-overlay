@@ -41,6 +41,8 @@ data class PrefsSnapshot(
     val closingSpeedCeilingMs: Int?,
     val visualMaxDistanceM: Int,
     val overlayOpacity: Float,
+    val overlayOnLeft: Boolean,
+    val overlayNarrow: Boolean,
     val radarLongOfflineThresholdMinutes: Int,
     val radarLongOfflineCapSec: Int,
     val pausedUntilEpochMs: Long,
@@ -224,6 +226,23 @@ class Prefs(context: Context) {
         get() = sp.getFloat(KEY_OVERLAY_OPACITY, 1.0f).coerceIn(0.5f, 1.0f)
         set(v) {
             sp.edit().putFloat(KEY_OVERLAY_OPACITY, v.coerceIn(0.5f, 1.0f)).apply()
+        }
+
+    /** Put the overlay strip on the screen's left edge instead of the right.
+     *  Only the window moves; nothing in the strip is mirrored. The dead-radar
+     *  banner follows it ([es.jjrh.bikeradar.OverlayGeometry.banner]). */
+    var overlayOnLeft: Boolean
+        get() = sp.getBoolean(KEY_OVERLAY_ON_LEFT, false)
+        set(v) {
+            sp.edit().putBoolean(KEY_OVERLAY_ON_LEFT, v).apply()
+        }
+
+    /** Draw the overlay strip narrower ([es.jjrh.bikeradar.OverlayGeometry.strip]).
+     *  The dead-radar banner keeps its width. */
+    var overlayNarrow: Boolean
+        get() = sp.getBoolean(KEY_OVERLAY_NARROW, false)
+        set(v) {
+            sp.edit().putBoolean(KEY_OVERLAY_NARROW, v).apply()
         }
 
     /** After the radar has been offline this many minutes, the reconnect
@@ -1111,6 +1130,8 @@ class Prefs(context: Context) {
         closingSpeedCeilingMs = closingSpeedCeilingMs,
         visualMaxDistanceM = visualMaxDistanceM,
         overlayOpacity = overlayOpacity,
+        overlayOnLeft = overlayOnLeft,
+        overlayNarrow = overlayNarrow,
         radarLongOfflineThresholdMinutes = radarLongOfflineThresholdMinutes,
         radarLongOfflineCapSec = radarLongOfflineCapSec,
         pausedUntilEpochMs = pausedUntilEpochMs,
@@ -1181,6 +1202,8 @@ class Prefs(context: Context) {
         appendLine("closing_speed_ceiling_ms=${closingSpeedCeilingMs ?: "none"}")
         appendLine("visual_max_distance_m=$visualMaxDistanceM")
         appendLine("overlay_opacity=$overlayOpacity")
+        appendLine("overlay_on_left=$overlayOnLeft")
+        appendLine("overlay_narrow=$overlayNarrow")
         appendLine("radar_long_offline_threshold_min=$radarLongOfflineThresholdMinutes")
         appendLine("radar_long_offline_cap_sec=$radarLongOfflineCapSec")
         appendLine("paused_until_epoch_ms=$pausedUntilEpochMs")
@@ -1273,6 +1296,8 @@ class Prefs(context: Context) {
             .coerceIn(CLOSING_CEILING_MIN, CLOSING_CEILING_MAX)
         const val KEY_VISUAL_MAX_DISTANCE_M = "visual_max_distance_m"
         const val KEY_OVERLAY_OPACITY = "overlay_opacity"
+        const val KEY_OVERLAY_ON_LEFT = "overlay_on_left"
+        const val KEY_OVERLAY_NARROW = "overlay_narrow"
         const val KEY_RADAR_LONG_OFFLINE_THRESHOLD_MIN = "radar_long_offline_threshold_min"
         const val KEY_RADAR_LONG_OFFLINE_CAP_SEC = "radar_long_offline_cap_sec"
         const val KEY_PAUSED_UNTIL_EPOCH_MS = "paused_until_epoch_ms"

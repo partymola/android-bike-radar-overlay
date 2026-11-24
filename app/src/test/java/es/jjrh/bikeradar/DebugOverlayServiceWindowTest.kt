@@ -4,7 +4,10 @@ package es.jjrh.bikeradar
 
 import android.content.Context
 import android.content.res.Configuration
+import android.os.Looper
 import android.view.WindowManager
+import androidx.test.core.app.ApplicationProvider
+import es.jjrh.bikeradar.data.Prefs
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertTrue
@@ -12,6 +15,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadow.api.Shadow
 import org.robolectric.shadows.ShadowSettings
@@ -50,5 +54,33 @@ class DebugOverlayServiceWindowTest {
         assertNotSame(before, view.layoutParams)
         assertEquals(0x35, (view.layoutParams as WindowManager.LayoutParams).gravity)
         controller.destroy()
+    }
+
+    @Test
+    fun aReplayShowsTheStripWhereTheRiderPutItAndFollowsAChange() {
+        ShadowSettings.setCanDrawOverlays(true)
+        val prefs = Prefs(ApplicationProvider.getApplicationContext())
+        prefs.overlayOnLeft = true
+        prefs.overlayNarrow = true
+        // onCreate called directly: the controller idles the main looper, which
+        // would let the settings collector move a window opened in the wrong place.
+        val controller = Robolectric.buildService(DebugOverlayService::class.java)
+        val service = controller.get()
+        service.onCreate()
+        val wm = service.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val view = Shadow.extract<ShadowWindowManagerImpl>(wm).views.single()
+        fun params() = view.layoutParams as WindowManager.LayoutParams
+        assertEquals(0x33, params().gravity)
+        assertEquals(240, params().width)
+
+        prefs.overlayOnLeft = false
+        val deadline = System.currentTimeMillis() + 5_000L
+        while (params().gravity != 0x35 && System.currentTimeMillis() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(10)
+        }
+        assertEquals(0x35, params().gravity)
+        assertEquals(240, params().width)
+        service.onDestroy()
     }
 }

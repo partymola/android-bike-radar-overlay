@@ -544,6 +544,11 @@
     <string name="settings_radar_overlay_dim_light">Lekkie</string>
     <string name="settings_radar_overlay_dim_medium">Średnie</string>
     <string name="settings_radar_overlay_dim_strong">Mocne</string>
+    <string name="settings_radar_overlay_side_title">Strona ekranu</string>
+    <string name="settings_radar_overlay_side_left">Po lewej</string>
+    <string name="settings_radar_overlay_side_right">Po prawej</string>
+    <string name="settings_radar_overlay_narrow_title">Wąska nakładka</string>
+    <string name="settings_radar_overlay_narrow_subtitle">Do radarów mierzących tylko odległość. Przy innych radarach trudniej ocenić położenie boczne pojazdów.</string>
     <string name="settings_radar_adaptive_title">Adaptacyjne kolory alertów</string>
     <string name="settings_radar_adaptive_subtitle">Dostosowuj progi koloru żółtego i czerwonego do prędkości roweru: większa czułość na postoju, mniejsza podczas jazdy.</string>
     <!-- The radar-left-on alarm (RadarLeftOnDecider). The 3 is

@@ -83,7 +83,7 @@ class DebugOverlayService : Service() {
             null
         }
 
-        val host = AndroidOverlayHost(this)
+        val host = AndroidOverlayHost(this, OverlayGeometry.strip(prefs.overlayOnLeft, prefs.overlayNarrow))
         overlayHost = host
         val view = host.createView().apply {
             setVisualMaxM(visualMaxM)
@@ -105,6 +105,7 @@ class DebugOverlayService : Service() {
                     .coerceIn(RadarOverlayView.MIN_VISUAL_MAX_M, RadarOverlayView.MAX_VISUAL_MAX_M)
                 view.setVisualMaxM(visualMaxM)
                 view.setAlertMaxM(maxDistanceM)
+                host.setGeometry(OverlayGeometry.strip(snap.overlayOnLeft, snap.overlayNarrow))
             }
         }
 

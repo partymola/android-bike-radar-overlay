@@ -42,7 +42,8 @@ screen stays yours.
 
 - **Radar overlay on any app.** A thin strip shows each vehicle behind
   you: distance, closing speed, and which side it's on. It stays on
-  screen whatever else you are running.
+  screen whatever else you are running. Put it on the left or right edge,
+  and make it narrower if you like, in **Settings → Alerts**, under Overlay.
 - **Alerts you don't have to look at.** Beeps rise in tiers as the
   closest car nears, a distinct urgent tone fires if an impact looks
   imminent, and a clear chime sounds when the radar sees nothing left
@@ -404,7 +405,9 @@ ajustes de idioma por aplicación de Android (Android 13 o posterior).
 
 - Radar en pantalla con la distancia, la velocidad de aproximación y la
   posición lateral de cada vehículo; pitidos por nivel y un aviso urgente
-  distinto para impacto inminente.
+  distinto para impacto inminente. La barra lateral puede ir a la izquierda o
+  a la derecha de la pantalla, y ser más estrecha, desde Ajustes → Alertas, en
+  Barra lateral.
 - Recuento de adelantamientos cercanos e historial de rutas en el teléfono,
   sin necesidad de Home Assistant: cuenta en la pantalla de inicio los que el
   radar llega a medir y guarda un historial por ruta (horas, distancia,

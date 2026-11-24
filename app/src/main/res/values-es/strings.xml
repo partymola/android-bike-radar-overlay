@@ -460,6 +460,11 @@
     <string name="settings_radar_overlay_dim_light">Suave</string>
     <string name="settings_radar_overlay_dim_medium">Medio</string>
     <string name="settings_radar_overlay_dim_strong">Fuerte</string>
+    <string name="settings_radar_overlay_side_title">Lado de la pantalla</string>
+    <string name="settings_radar_overlay_side_left">A la izquierda</string>
+    <string name="settings_radar_overlay_side_right">A la derecha</string>
+    <string name="settings_radar_overlay_narrow_title">Barra estrecha</string>
+    <string name="settings_radar_overlay_narrow_subtitle">Va bien con radares que solo miden la distancia. Con otros, cuesta más ver la distancia lateral de cada vehículo.</string>
     <string name="settings_radar_adaptive_title">Colores de alerta adaptativos</string>
     <string name="settings_radar_adaptive_subtitle">Ajusta los umbrales ámbar / rojo según la velocidad de tu bici: más sensible al estar parado, menos al ir a velocidad de crucero.</string>
     <string name="settings_radar_section_walkaway">Alarma al alejarte</string>

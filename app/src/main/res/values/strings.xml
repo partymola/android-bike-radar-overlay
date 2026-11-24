@@ -525,6 +525,13 @@
     <string name="settings_radar_overlay_dim_light">Light</string>
     <string name="settings_radar_overlay_dim_medium">Medium</string>
     <string name="settings_radar_overlay_dim_strong">Strong</string>
+    <!-- Which screen edge the overlay strip sits on. The dead-radar banner
+         follows it. -->
+    <string name="settings_radar_overlay_side_title">Screen side</string>
+    <string name="settings_radar_overlay_side_left">Left</string>
+    <string name="settings_radar_overlay_side_right">Right</string>
+    <string name="settings_radar_overlay_narrow_title">Narrow overlay</string>
+    <string name="settings_radar_overlay_narrow_subtitle">Suits a radar that reports distance only. With other radars it is harder to see how far to your side a vehicle is.</string>
     <string name="settings_radar_adaptive_title">Adaptive alert colours</string>
     <string name="settings_radar_adaptive_subtitle">Scale amber / red thresholds by your bike speed: more sensitive when stopped, less when cruising.</string>
     <!-- The radar-left-on alarm (RadarLeftOnDecider). The 3 is

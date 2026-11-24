@@ -10,9 +10,22 @@ internal enum class OverlayEdge { LEFT, RIGHT }
 
 /** Which screen edge the overlay window sits on, and how wide it is. */
 internal data class OverlayGeometry(
-    val edge: OverlayEdge = OverlayEdge.RIGHT,
-    val widthDp: Int = 130,
+    val edge: OverlayEdge,
+    val widthDp: Int,
 ) {
+    companion object {
+        private const val WIDE_DP = 130
+        private const val NARROW_DP = 80
+
+        /** The ride strip's window for the rider's overlay settings. */
+        fun strip(onLeft: Boolean, narrow: Boolean): OverlayGeometry = OverlayGeometry(edge(onLeft), if (narrow) NARROW_DP else WIDE_DP)
+
+        /** The dead-radar banner's window: the strip's edge, never narrowed, as its copy wraps to 130 dp. */
+        fun banner(onLeft: Boolean): OverlayGeometry = OverlayGeometry(edge(onLeft), WIDE_DP)
+
+        private fun edge(onLeft: Boolean) = if (onLeft) OverlayEdge.LEFT else OverlayEdge.RIGHT
+    }
+
     // Physical LEFT/RIGHT, never START/END: the setting names a physical edge.
     val gravity: Int
         get() = Gravity.TOP or when (edge) {

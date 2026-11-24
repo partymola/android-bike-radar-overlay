@@ -14,6 +14,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
@@ -62,7 +63,7 @@ class AndroidOverlayHostTest {
 
     @Test
     fun aGeometryChangeReLaysOutTheAttachedView() {
-        val host = AndroidOverlayHost(context, wm = wm)
+        val host = AndroidOverlayHost(context, OverlayGeometry(OverlayEdge.RIGHT, 130), wm)
         val view = host.createView()
         host.attach(view)
         host.setGeometry(OverlayGeometry(OverlayEdge.LEFT, 80))
@@ -85,14 +86,23 @@ class AndroidOverlayHostTest {
     @Test
     @Config(qualifiers = "xhdpi")
     fun theWidthFollowsTheDisplayDensity() {
-        val host = AndroidOverlayHost(context, wm = wm)
+        val host = AndroidOverlayHost(context, OverlayGeometry(OverlayEdge.RIGHT, 130), wm)
         host.attach(host.createView())
         assertEquals(260, wm.calls.single().params.width)
     }
 
     @Test
+    fun aDensityChangeAfterTheHostIsBuiltReachesTheReLayout() {
+        val host = AndroidOverlayHost(context, OverlayGeometry(OverlayEdge.RIGHT, 130), wm)
+        host.attach(host.createView())
+        RuntimeEnvironment.setQualifiers("+xhdpi")
+        host.onConfigurationChanged()
+        assertEquals(listOf("add" to 390, "update" to 260), wm.calls.map { it.op to it.params.width })
+    }
+
+    @Test
     fun detachingAnOlderViewKeepsTheNewerOneTracked() {
-        val host = AndroidOverlayHost(context, wm = wm)
+        val host = AndroidOverlayHost(context, OverlayGeometry(OverlayEdge.RIGHT, 130), wm)
         val older = host.createView()
         val newer = host.createView()
         host.attach(older)
@@ -105,7 +115,7 @@ class AndroidOverlayHostTest {
 
     @Test
     fun aGeometryChangeOnADetachedHostWaitsForTheNextAttach() {
-        val host = AndroidOverlayHost(context, wm = wm)
+        val host = AndroidOverlayHost(context, OverlayGeometry(OverlayEdge.RIGHT, 130), wm)
         host.setGeometry(OverlayGeometry(OverlayEdge.LEFT, 80))
         assertEquals(emptyList<String>(), wm.calls.map { it.op })
         host.attach(host.createView())
@@ -116,7 +126,7 @@ class AndroidOverlayHostTest {
 
     @Test
     fun aGeometryChangeAfterDetachTouchesNoWindow() {
-        val host = AndroidOverlayHost(context, wm = wm)
+        val host = AndroidOverlayHost(context, OverlayGeometry(OverlayEdge.RIGHT, 130), wm)
         val view = host.createView()
         host.attach(view)
         host.detach(view)
@@ -126,7 +136,7 @@ class AndroidOverlayHostTest {
 
     @Test
     fun aConfigurationChangeKeepsTheChangedGeometry() {
-        val host = AndroidOverlayHost(context, wm = wm)
+        val host = AndroidOverlayHost(context, OverlayGeometry(OverlayEdge.RIGHT, 130), wm)
         host.attach(host.createView())
         host.setGeometry(OverlayGeometry(OverlayEdge.LEFT, 80))
         host.onConfigurationChanged()
@@ -136,7 +146,7 @@ class AndroidOverlayHostTest {
 
     @Test
     fun aFailedReLayoutIsContained() {
-        val host = AndroidOverlayHost(context, wm = wm)
+        val host = AndroidOverlayHost(context, OverlayGeometry(OverlayEdge.RIGHT, 130), wm)
         host.attach(host.createView())
         wm.failUpdates = true
         host.setGeometry(OverlayGeometry(OverlayEdge.LEFT, 80))
@@ -146,7 +156,7 @@ class AndroidOverlayHostTest {
 
     @Test
     fun aFailedAttachLeavesNothingToReLayOut() {
-        val host = AndroidOverlayHost(context, wm = wm)
+        val host = AndroidOverlayHost(context, OverlayGeometry(OverlayEdge.RIGHT, 130), wm)
         wm.failAdds = true
         assertTrue(host.attach(host.createView()) is WindowManager.BadTokenException)
         host.setGeometry(OverlayGeometry(OverlayEdge.LEFT, 80))
@@ -155,7 +165,7 @@ class AndroidOverlayHostTest {
 
     @Test
     fun aFailedDetachStillForgetsTheView() {
-        val host = AndroidOverlayHost(context, wm = wm)
+        val host = AndroidOverlayHost(context, OverlayGeometry(OverlayEdge.RIGHT, 130), wm)
         val view = host.createView()
         host.attach(view)
         wm.failRemoves = true

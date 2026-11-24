@@ -806,6 +806,41 @@ class PrefsTest {
     }
 
     @Test
+    fun `the overlay starts as a wide strip on the right`() {
+        // Upgraders never wrote either key, so this is also where they land.
+        assertFalse(prefs.overlayOnLeft)
+        assertFalse(prefs.overlayNarrow)
+        assertFalse(prefs.snapshot().overlayOnLeft)
+        assertFalse(prefs.snapshot().overlayNarrow)
+        val dump = prefs.dumpAll()
+        assertTrue(dump, dump.contains("overlay_on_left=false"))
+        assertTrue(dump, dump.contains("overlay_narrow=false"))
+    }
+
+    @Test
+    fun `the overlay side and width are stored apart and reach the snapshot and the bundle`() {
+        // One at a time, so two settings sharing a key or a field cannot pass.
+        val raw = context.getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE)
+        prefs.overlayOnLeft = true
+        assertTrue(raw.getBoolean("overlay_on_left", false))
+        assertFalse(raw.contains("overlay_narrow"))
+        assertTrue(Prefs(context).snapshot().overlayOnLeft)
+        assertFalse(Prefs(context).snapshot().overlayNarrow)
+        assertTrue(Prefs(context).dumpAll().contains("overlay_on_left=true"))
+        assertTrue(Prefs(context).dumpAll().contains("overlay_narrow=false"))
+
+        prefs.overlayOnLeft = false
+        prefs.overlayNarrow = true
+        assertTrue(raw.getBoolean("overlay_narrow", false))
+        assertFalse(Prefs(context).overlayOnLeft)
+        assertTrue(Prefs(context).overlayNarrow)
+        assertFalse(Prefs(context).snapshot().overlayOnLeft)
+        assertTrue(Prefs(context).snapshot().overlayNarrow)
+        assertTrue(Prefs(context).dumpAll().contains("overlay_on_left=false"))
+        assertTrue(Prefs(context).dumpAll().contains("overlay_narrow=true"))
+    }
+
+    @Test
     fun `urgent pass clearance defaults to the shipped margin when never set`() {
         // The clamp test above writes before it reads, so it says nothing
         // about the value a rider who never opens the slider actually gets -

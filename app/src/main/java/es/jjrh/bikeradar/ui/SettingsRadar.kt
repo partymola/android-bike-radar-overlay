@@ -27,7 +27,9 @@ import androidx.compose.material.icons.filled.PowerOff
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.TurnSlightRight
+import androidx.compose.material.icons.filled.WidthNormal
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -87,6 +89,9 @@ internal fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
     var closingCeiling by rememberSaveable { mutableStateOf(prefs.closingSpeedCeilingMs) }
     var visualDist by rememberSaveable { mutableIntStateOf(prefs.visualMaxDistanceM) }
     var overlayOpacity by rememberSaveable { mutableFloatStateOf(prefs.overlayOpacity) }
+    var overlayOnLeft by rememberSaveable { mutableStateOf(prefs.overlayOnLeft) }
+    var overlayNarrow by rememberSaveable { mutableStateOf(prefs.overlayNarrow) }
+    var showSidePicker by rememberSaveable { mutableStateOf(false) }
     var adaptive by rememberSaveable { mutableStateOf(prefs.adaptiveAlertsEnabled) }
     var urgentLowSpeed by rememberSaveable { mutableStateOf(prefs.urgentLowSpeedEnabled) }
     var turnAware by rememberSaveable { mutableStateOf(prefs.turnAwareAlertsEnabled) }
@@ -135,6 +140,13 @@ internal fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
         overlayOpacity = overlayOpacity,
         onOverlayOpacityChange = { overlayOpacity = it },
         onOverlayOpacityFinished = { prefs.overlayOpacity = overlayOpacity },
+        overlayOnLeft = overlayOnLeft,
+        onOverlaySideClick = { showSidePicker = true },
+        overlayNarrow = overlayNarrow,
+        onOverlayNarrowChange = {
+            overlayNarrow = it
+            prefs.overlayNarrow = it
+        },
         adaptive = adaptive,
         onAdaptiveChange = {
             adaptive = it
@@ -209,6 +221,18 @@ internal fun SettingsRadarBody(navController: NavController, prefs: Prefs) {
         onStopScanningClick = { showStopDialog = true },
     )
 
+    if (showSidePicker) {
+        OverlaySidePicker(
+            onLeft = overlayOnLeft,
+            onSelect = {
+                overlayOnLeft = it
+                prefs.overlayOnLeft = it
+                showSidePicker = false
+            },
+            onDismiss = { showSidePicker = false },
+        )
+    }
+
     if (showStopDialog) {
         val cancelFocus = remember { FocusRequester() }
         // M3 AlertDialog doesn't auto-focus the dismiss button; force Cancel as default.
@@ -258,6 +282,24 @@ internal fun rememberWalkAwayCanBypassDnd(): Boolean {
         onPauseOrDispose { }
     }
     return allowed
+}
+
+@Composable
+private fun overlaySideLabel(onLeft: Boolean): String = stringResource(
+    if (onLeft) R.string.settings_radar_overlay_side_left else R.string.settings_radar_overlay_side_right,
+)
+
+/** The screen-side picker, Left then Right; [onSelect] gets whether Left was chosen. */
+@Composable
+internal fun OverlaySidePicker(onLeft: Boolean, onSelect: (Boolean) -> Unit, onDismiss: () -> Unit) {
+    RadioPickerDialog(
+        title = stringResource(R.string.settings_radar_overlay_side_title),
+        options = listOf(true, false),
+        label = { overlaySideLabel(it) },
+        current = onLeft,
+        onSelect = onSelect,
+        onDismiss = onDismiss,
+    )
 }
 
 /**
@@ -314,6 +356,10 @@ internal fun SettingsRadarContent(
     overlayOpacity: Float,
     onOverlayOpacityChange: (Float) -> Unit,
     onOverlayOpacityFinished: () -> Unit,
+    overlayOnLeft: Boolean,
+    onOverlaySideClick: () -> Unit,
+    overlayNarrow: Boolean,
+    onOverlayNarrowChange: (Boolean) -> Unit,
     adaptive: Boolean,
     onAdaptiveChange: (Boolean) -> Unit,
     urgentLowSpeed: Boolean,
@@ -458,6 +504,24 @@ internal fun SettingsRadarContent(
                 onValueChange = onOverlayOpacityChange,
                 onValueChangeFinished = onOverlayOpacityFinished,
             )
+            SettingsRowGroup {
+                SettingsRow(
+                    icon = Icons.Default.SwapHoriz,
+                    iconTint = br.brand,
+                    title = stringResource(R.string.settings_radar_overlay_side_title),
+                    subtitle = overlaySideLabel(overlayOnLeft),
+                    onClick = onOverlaySideClick,
+                    chevron = false,
+                )
+                SettingsToggleRow(
+                    leadingIcon = Icons.Default.WidthNormal,
+                    leadingTint = br.brand,
+                    title = stringResource(R.string.settings_radar_overlay_narrow_title),
+                    subtitle = stringResource(R.string.settings_radar_overlay_narrow_subtitle),
+                    checked = overlayNarrow,
+                    onCheckedChange = onOverlayNarrowChange,
+                )
+            }
 
             SettingsSectionLabel(stringResource(R.string.settings_radar_section_adaptive))
             SettingsRowGroup {

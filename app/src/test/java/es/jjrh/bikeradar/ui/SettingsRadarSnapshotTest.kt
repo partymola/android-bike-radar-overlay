@@ -15,8 +15,10 @@ import org.robolectric.annotation.GraphicsMode
  * Roborazzi goldens for the Alerts screen, rendering the stateless
  * [SettingsRadarContent] leaf with production default values.
  *
- * [defaults] locks the top of the screen (Alerts -> Overlay -> Adaptive ->
- * Connection) at the standard viewport. The close-pass section sits below
+ * [defaults] locks the top of the screen, the Alerts section down to the
+ * Overlay heading, at the standard viewport; the Overlay section's controls
+ * show in the taller goldens below. The side picker's dialog is
+ * [SettingsRadarSidePickerSnapshotTest]'s. The close-pass section sits below
  * that fold, so [closePassSectionNoHa] / [closePassSectionWithHa] render at
  * a taller viewport to pin the "Count close passes" toggle - its title, both
  * subtitle branches (standalone vs the "...and sent to Home Assistant"
@@ -116,6 +118,10 @@ class SettingsRadarSnapshotTest {
             overlayOpacity = 1.0f,
             onOverlayOpacityChange = {},
             onOverlayOpacityFinished = {},
+            overlayOnLeft = false,
+            onOverlaySideClick = {},
+            overlayNarrow = false,
+            onOverlayNarrowChange = {},
             adaptive = true,
             onAdaptiveChange = {},
             urgentLowSpeed = true,

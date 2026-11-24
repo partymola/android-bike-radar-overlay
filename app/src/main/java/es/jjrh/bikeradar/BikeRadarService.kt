@@ -255,16 +255,20 @@ class BikeRadarService : Service() {
     private val walkAwaySnoozeJob = AtomicReference<Job?>(null)
 
     // Overlay window + view ownership lives in AndroidOverlayHost; the
-    // service forwards onConfigurationChanged so the host re-applies layout
-    // params on rotation.
-    private lateinit var overlayHost: AndroidOverlayHost
+    // service forwards onConfigurationChanged so the host re-issues the
+    // window parameters, whose dp width follows a new density.
+    @androidx.annotation.VisibleForTesting
+    internal lateinit var overlayHost: AndroidOverlayHost
+        private set
 
     // Second overlay host for the service-owned "reconnecting" banner shown
     // while the rear-radar link is down (the per-connection pipeline and its
     // view are torn down during the drop, so this is a separate surface).
     // Driven off RadarLinkVisualDecider from the walk-away tick. The view ref
     // is touched only on the main thread (show/hide dispatch to Main).
-    private lateinit var reconnectHost: AndroidOverlayHost
+    @androidx.annotation.VisibleForTesting
+    internal lateinit var reconnectHost: AndroidOverlayHost
+        private set
     private var reconnectBannerView: RadarOverlayView? = null
 
     // Pipeline orchestrates the per-frame combine(RadarStateBus +
@@ -446,8 +450,19 @@ class BikeRadarService : Service() {
             }
         }
 
-        overlayHost = AndroidOverlayHost(this)
-        reconnectHost = AndroidOverlayHost(this)
+        // Seeded from the stored settings, so neither window opens at the
+        // default and then jumps (`OverlayGeometryServiceTest`).
+        val overlaySettings = overlayPrefs
+        overlayHost = AndroidOverlayHost(this, OverlayGeometry.strip(overlaySettings.overlayOnLeft, overlaySettings.overlayNarrow))
+        reconnectHost = AndroidOverlayHost(this, OverlayGeometry.banner(overlaySettings.overlayOnLeft))
+        // On Main, the only thread setGeometry may run on; the snapshots are
+        // built off Main.
+        scope.launch(Dispatchers.Main) {
+            prefs.flow.flowOn(Dispatchers.IO).collect {
+                overlayHost.setGeometry(OverlayGeometry.strip(it.overlayOnLeft, it.overlayNarrow))
+                reconnectHost.setGeometry(OverlayGeometry.banner(it.overlayOnLeft))
+            }
+        }
         turnSensor = TurnSensorController(
             sensorManager = getSystemService(SENSOR_SERVICE) as? SensorManager,
             clog = ::clog,

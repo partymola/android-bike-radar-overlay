@@ -12,13 +12,16 @@ import android.view.WindowManager
 
 /**
  * Production [OverlayHost] backed by the Android [WindowManager]. Tracks the
- * attached view and lays it out from its [OverlayGeometry] on attach, on a
- * configuration change such as a display density change
- * ([onConfigurationChanged]) and on [setGeometry].
+ * attached view and lays it out from its [OverlayGeometry] on attach, on
+ * [setGeometry] and after a configuration change ([onConfigurationChanged]),
+ * which re-issues the window parameters so the dp width follows a new
+ * density. The view's drawing keeps the density it was built with.
+ *
+ * Main thread only.
  */
 internal class AndroidOverlayHost(
     private val context: Context,
-    private var geometry: OverlayGeometry = OverlayGeometry(),
+    private var geometry: OverlayGeometry,
     private val wm: WindowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager,
 ) : OverlayHost {
 
@@ -52,7 +55,7 @@ internal class AndroidOverlayHost(
 
     override fun onConfigurationChanged() = relayout()
 
-    /** Main thread only. Re-lays out an attached view; a detached host applies it on the next attach. */
+    /** Re-lays out an attached view; a detached host applies it on the next attach. */
     fun setGeometry(geometry: OverlayGeometry) {
         if (geometry == this.geometry) return
         this.geometry = geometry
@@ -64,8 +67,8 @@ internal class AndroidOverlayHost(
         try {
             wm.updateViewLayout(view, params())
         } catch (t: Throwable) {
-            // The window can already be gone (overlay permission revoked)
-            // while the view is still tracked; the next attach issues fresh params.
+            // Defensive: throws only if the view was removed outside this host;
+            // a revoked overlay permission hides the window rather than removing it.
             Log.w(TAG, "updateViewLayout failed", t)
         }
     }

@@ -8,7 +8,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,8 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -27,7 +24,6 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -36,11 +32,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
@@ -145,8 +139,10 @@ private fun SettingsLightsBody(navController: NavController, prefs: Prefs) {
     ManualLocationDialog(manualLocation)
 
     when (openPicker) {
-        LightPicker.RADAR_DAY -> RadarModePickerDialog(
+        LightPicker.RADAR_DAY -> RadioPickerDialog(
             title = stringResource(R.string.settings_lights_daytime_mode),
+            options = RadarLightMode.entries,
+            label = { it.displayName() },
             current = radarDay,
             onSelect = {
                 radarDay = it
@@ -155,8 +151,10 @@ private fun SettingsLightsBody(navController: NavController, prefs: Prefs) {
             },
             onDismiss = { openPicker = null },
         )
-        LightPicker.RADAR_NIGHT -> RadarModePickerDialog(
+        LightPicker.RADAR_NIGHT -> RadioPickerDialog(
             title = stringResource(R.string.settings_lights_night_mode),
+            options = RadarLightMode.entries,
+            label = { it.displayName() },
             current = radarNight,
             onSelect = {
                 radarNight = it
@@ -165,8 +163,10 @@ private fun SettingsLightsBody(navController: NavController, prefs: Prefs) {
             },
             onDismiss = { openPicker = null },
         )
-        LightPicker.DASHCAM_DAY -> DashcamModePickerDialog(
+        LightPicker.DASHCAM_DAY -> RadioPickerDialog(
             title = stringResource(R.string.settings_lights_daytime_mode),
+            options = CameraLightMode.entries,
+            label = { it.displayName() },
             current = dashcamDay,
             onSelect = {
                 dashcamDay = it
@@ -175,8 +175,10 @@ private fun SettingsLightsBody(navController: NavController, prefs: Prefs) {
             },
             onDismiss = { openPicker = null },
         )
-        LightPicker.DASHCAM_NIGHT -> DashcamModePickerDialog(
+        LightPicker.DASHCAM_NIGHT -> RadioPickerDialog(
             title = stringResource(R.string.settings_lights_night_mode),
+            options = CameraLightMode.entries,
+            label = { it.displayName() },
             current = dashcamNight,
             onSelect = {
                 dashcamNight = it
@@ -430,70 +432,6 @@ internal fun CoordinateEntryDialog(
                 enabled = latOk && lonOk,
             ) { Text(stringResource(R.string.settings_coord_save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
-    )
-}
-
-@Composable
-private fun RadarModePickerDialog(
-    title: String,
-    current: RadarLightMode,
-    onSelect: (RadarLightMode) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title, fontSize = 16.sp) },
-        text = {
-            Column(modifier = Modifier.selectableGroup()) {
-                RadarLightMode.entries.forEach { mode ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .selectable(selected = mode == current, role = Role.RadioButton, onClick = { onSelect(mode) })
-                            .padding(vertical = 10.dp, horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        RadioButton(selected = mode == current, onClick = null)
-                        Text(text = mode.displayName(), fontSize = 14.sp)
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
-    )
-}
-
-@Composable
-private fun DashcamModePickerDialog(
-    title: String,
-    current: CameraLightMode,
-    onSelect: (CameraLightMode) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title, fontSize = 16.sp) },
-        text = {
-            Column(modifier = Modifier.selectableGroup()) {
-                CameraLightMode.entries.forEach { mode ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .selectable(selected = mode == current, role = Role.RadioButton, onClick = { onSelect(mode) })
-                            .padding(vertical = 10.dp, horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        RadioButton(selected = mode == current, onClick = null)
-                        Text(text = mode.displayName(), fontSize = 14.sp)
-                    }
-                }
-            }
-        },
-        confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
     )
 }

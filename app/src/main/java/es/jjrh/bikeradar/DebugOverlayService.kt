@@ -10,15 +10,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
-import android.graphics.PixelFormat
 import android.media.AudioManager
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.util.Log
-import android.util.TypedValue
-import android.view.Gravity
-import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import es.jjrh.bikeradar.data.Prefs
 import kotlinx.coroutines.CoroutineScope
@@ -35,7 +31,7 @@ import kotlinx.coroutines.launch
 class DebugOverlayService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private var wm: WindowManager? = null
+    private var overlayHost: AndroidOverlayHost? = null
     private var overlayView: RadarOverlayView? = null
     private var collectJob: Job? = null
     private var beeper: AlertBeeper? = null
@@ -87,14 +83,17 @@ class DebugOverlayService : Service() {
             null
         }
 
-        val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        this.wm = wm
-        val view = RadarOverlayView(this).apply {
+        val host = AndroidOverlayHost(this)
+        overlayHost = host
+        val view = host.createView().apply {
             setVisualMaxM(visualMaxM)
             setAlertMaxM(maxDistanceM)
         }
+        if (host.attach(view) != null) {
+            stopSelf()
+            return
+        }
         overlayView = view
-        wm.addView(view, buildParams(wm))
 
         scope.launch {
             prefs.flow.collect { snap ->
@@ -120,9 +119,7 @@ class DebugOverlayService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         collectJob?.cancel()
-        try {
-            overlayView?.let { wm?.removeView(it) }
-        } catch (_: Throwable) {}
+        overlayView?.let { overlayHost?.detach(it) }
         overlayView = null
         beeper?.release()
         beeper = null
@@ -131,11 +128,7 @@ class DebugOverlayService : Service() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        val v = overlayView ?: return
-        val w = wm ?: return
-        try {
-            w.updateViewLayout(v, buildParams(w))
-        } catch (_: Throwable) {}
+        overlayHost?.onConfigurationChanged()
     }
 
     private fun handleAlerts(state: RadarState) {
@@ -149,25 +142,6 @@ class DebugOverlayService : Service() {
         )
         b.playCue(AlertCue.forEvent(ev))
     }
-
-    private fun buildParams(wm: WindowManager): WindowManager.LayoutParams {
-        val screenH = wm.currentWindowMetrics.bounds.height()
-        return WindowManager.LayoutParams(
-            dp(130f).toInt(),
-            screenH,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT,
-        ).apply {
-            gravity = Gravity.TOP or Gravity.END
-            x = 0
-            y = 0
-        }
-    }
-
-    private fun dp(v: Float) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v, resources.displayMetrics)
 
     private fun ensureChannel() {
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager

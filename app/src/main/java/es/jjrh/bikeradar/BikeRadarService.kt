@@ -16,15 +16,12 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
-import android.graphics.PixelFormat
 import android.hardware.SensorManager
 import android.media.AudioManager
 import android.os.IBinder
 import android.os.ParcelUuid
 import android.os.SystemClock
 import android.util.Log
-import android.view.Gravity
-import android.view.WindowManager
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import es.jjrh.bikeradar.data.HaCredentials
@@ -449,8 +446,8 @@ class BikeRadarService : Service() {
             }
         }
 
-        overlayHost = AndroidOverlayHost(this, ::buildOverlayParams)
-        reconnectHost = AndroidOverlayHost(this, ::buildOverlayParams)
+        overlayHost = AndroidOverlayHost(this)
+        reconnectHost = AndroidOverlayHost(this)
         turnSensor = TurnSensorController(
             sensorManager = getSystemService(SENSOR_SERVICE) as? SensorManager,
             clog = ::clog,
@@ -1369,22 +1366,6 @@ class BikeRadarService : Service() {
     private fun pruneCaptureLogs() = captureLog.prune()
 
     // ── helpers ───────────────────────────────────────────────────────────────
-
-    private fun dpToPx(dp: Int): Int = (dp * resources.displayMetrics.density).toInt()
-
-    private fun buildOverlayParams(wm: WindowManager) = WindowManager.LayoutParams(
-        dpToPx(130),
-        wm.currentWindowMetrics.bounds.height(),
-        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-        PixelFormat.TRANSLUCENT,
-    ).also {
-        it.gravity = Gravity.TOP or Gravity.END
-        it.x = 0
-        it.y = 0
-    }
 
     private fun isRearDevice(name: String): Boolean = DeviceNameMatcher.isRearAdvert(name)
 

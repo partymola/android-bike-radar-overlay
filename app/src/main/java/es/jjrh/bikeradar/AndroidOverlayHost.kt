@@ -11,19 +11,15 @@ import android.util.Log
 import android.view.WindowManager
 
 /**
- * Production [OverlayHost] backed by the Android [WindowManager]. Owns the
- * window-level state previously held as `@Volatile` fields on
- * [BikeRadarService]: a reference to the attached view + a function that
- * builds the per-attach [WindowManager.LayoutParams]. Re-applies the params
- * on rotation via [onConfigurationChanged].
+ * Production [OverlayHost] backed by the Android [WindowManager]. Tracks the
+ * attached view and lays it out from its [OverlayGeometry] on attach, on
+ * rotation ([onConfigurationChanged]) and on [setGeometry].
  */
 internal class AndroidOverlayHost(
     private val context: Context,
-    private val buildParams: (WindowManager) -> WindowManager.LayoutParams,
+    private var geometry: OverlayGeometry = OverlayGeometry(),
+    private val wm: WindowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager,
 ) : OverlayHost {
-
-    private val wm: WindowManager =
-        context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
     @Volatile private var attachedView: RadarOverlayView? = null
 
@@ -32,7 +28,7 @@ internal class AndroidOverlayHost(
     override fun canDrawOverlays(): Boolean = Settings.canDrawOverlays(context)
 
     override fun attach(view: RadarOverlayView): Throwable? = try {
-        wm.addView(view, buildParams(wm))
+        wm.addView(view, params())
         attachedView = view
         null
     } catch (t: Throwable) {
@@ -44,7 +40,7 @@ internal class AndroidOverlayHost(
         try {
             wm.removeView(view)
         } catch (t: Throwable) {
-            Log.w(TAG, "removeView failed: $t")
+            Log.w(TAG, "removeView failed", t)
         } finally {
             // Only clear the tracked reference if it still pointed to this
             // view; a fast detach->attach cycle could otherwise null out the
@@ -53,16 +49,27 @@ internal class AndroidOverlayHost(
         }
     }
 
-    override fun onConfigurationChanged() {
+    override fun onConfigurationChanged() = relayout()
+
+    /** Main thread only. Re-lays out an attached view; a detached host applies it on the next attach. */
+    fun setGeometry(geometry: OverlayGeometry) {
+        if (geometry == this.geometry) return
+        this.geometry = geometry
+        relayout()
+    }
+
+    private fun relayout() {
         val view = attachedView ?: return
         try {
-            wm.updateViewLayout(view, buildParams(wm))
-        } catch (_: Throwable) {
-            // Layout-update can throw if the view was detached between the
-            // null check and the call; safe to ignore (the next attach will
-            // re-issue layout params).
+            wm.updateViewLayout(view, params())
+        } catch (t: Throwable) {
+            // The window can already be gone (overlay permission revoked)
+            // while the view is still tracked; the next attach issues fresh params.
+            Log.w(TAG, "updateViewLayout failed", t)
         }
     }
+
+    private fun params() = geometry.layoutParams(wm, context.resources.displayMetrics.density)
 
     private companion object {
         private const val TAG = "BikeRadar.OverlayHost"

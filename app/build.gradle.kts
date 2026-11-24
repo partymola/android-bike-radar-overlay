@@ -374,7 +374,8 @@ tasks.withType<Test>().configureEach {
     // Gradle daemon). CorpusReplayGate assume-skips when unset, so CI and
     // corpus-less checkouts are unaffected. corpusRecord=true rewrites the
     // baseline instead of comparing; corpusUnconfidentWait=true compares with
-    // the Experimental wait on and refuses to record.
+    // the Experimental wait on, and corpusMirror=true compares every ride
+    // mirrored left to right. Both refuse to record.
     (project.findProperty("bikeradar.corpusDir") as String?)?.let {
         systemProperty("bikeradar.corpusDir", it)
         // The gate's summary lines (captures replayed, fresh-capture count)
@@ -387,6 +388,9 @@ tasks.withType<Test>().configureEach {
     }
     (project.findProperty("bikeradar.corpusUnconfidentWait") as String?)?.let {
         systemProperty("bikeradar.corpusUnconfidentWait", it)
+    }
+    (project.findProperty("bikeradar.corpusMirror") as String?)?.let {
+        systemProperty("bikeradar.corpusMirror", it)
     }
     // Cue-ledger golden regeneration: -Pbikeradar.cueLedgerRecord=true makes
     // CueLedgerReplayTest print the freshly-computed ledger to stdout (paste

@@ -44,6 +44,12 @@ import java.util.zip.GZIPInputStream
  * unconfident wait on, so the failure diff is what the switch changes. It is
  * compare-only and refuses to record: the baseline is the shipped default.
  *
+ * `-Pbikeradar.corpusMirror=true` replays every ride mirrored left to right,
+ * as if ridden where traffic passes on the other side: every lateral field the
+ * decoder emits changes sign, mount offset included. It is compare-only too,
+ * and a clean run means each ride's cue counts are unchanged when mirrored.
+ * The decoder's own gates still see the ride unmirrored.
+ *
  * Capture format: lines of `<epoch-ms> 3204 <hex>` (the V2 notify stream),
  * as written by the in-app capture log and consumed by [ReplayService], plus
  * the `ebike` lines [EBikeCaptureFormatter] writes, which carry the rider
@@ -67,6 +73,8 @@ class CorpusReplayGate {
     private val alertEnvelopesM = listOf(20, 30)
 
     private val unconfidentWait = System.getProperty("bikeradar.corpusUnconfidentWait") == "true"
+    private val mirror = System.getProperty("bikeradar.corpusMirror") == "true"
+    private val compareOnlyMode = compareOnlyMode(unconfidentWait, mirror)
 
     private data class Tally(
         var beep1: Int = 0,
@@ -224,7 +232,8 @@ class CorpusReplayGate {
                 val bytes = hexToBytes(parts[2]) ?: return@forEach
                 ts = lineTs
                 if (ebike != null && ebikeAtMs == null) ebikeAtMs = lineTs
-                val state = decoder.feed(bytes) ?: return@forEach
+                val decoded = decoder.feed(bytes) ?: return@forEach
+                val state = if (mirror) decoded.copy(vehicles = decoded.vehicles.map { mirrored(it) }) else decoded
                 val ebikeFresh = ebikeAtMs?.let { lineTs - it <= EBikeSnapshotCoordinator.ALERT_FRESH_MS } == true
                 val live = ebike.takeIf { ebikeFresh }
                 when (
@@ -278,8 +287,8 @@ class CorpusReplayGate {
         val baselineFile = File(corpusDir, BASELINE_NAME)
         val record = System.getProperty("bikeradar.corpusRecord") == "true"
         // Before the replay, so a misconfigured run fails in seconds.
-        refusal(unconfidentWait, record, baselineFile.exists())?.let { error(it) }
-        val mode = if (unconfidentWait) " (unconfident wait ON)" else ""
+        refusal(compareOnlyMode, record, baselineFile.exists())?.let { error(it) }
+        val mode = compareOnlyMode?.let { " ($it)" } ?: ""
 
         // A capture that cannot be replayed (mid-write truncation from a
         // crash, a corrupt byte sequence the decoder rejects with a throw)
@@ -345,8 +354,8 @@ class CorpusReplayGate {
         tolerated.forEach { println(it.value + " (never in baseline, tolerated)") }
         val problems = changed + missing + regressed.map { it.value } + corruptBaseline
         if (problems.isNotEmpty()) {
-            val advice = if (unconfidentWait) {
-                "This diff is what the unconfident wait changes; the baseline stays as recorded.\n\n"
+            val advice = if (compareOnlyMode != null) {
+                "This diff is what $compareOnlyMode changes; the baseline stays as recorded.\n\n"
             } else {
                 "If the alert-behaviour change is intentional, re-record with " +
                     "-Pbikeradar.corpusRecord=true and cite this diff in the review.\n\n"
@@ -363,14 +372,31 @@ class CorpusReplayGate {
     internal companion object {
         private const val BASELINE_NAME = "corpus-baseline.txt"
 
-        /** Why a run must not go ahead, or null. The unconfident wait is
-         *  compare-only: a baseline recorded with it on, or created by a first
-         *  run with it on, would not be the shipped default. */
-        internal fun refusal(unconfidentWait: Boolean, record: Boolean, baselineExists: Boolean): String? = when {
-            !unconfidentWait -> null
-            record -> "the unconfident wait is compare-only: re-recording with it on would bake it into the baseline"
-            !baselineExists -> "the unconfident wait is compare-only: there is no baseline to compare with"
+        /** The compare-only switches a run has on, as its messages name them, or null. */
+        internal fun compareOnlyMode(unconfidentWait: Boolean, mirror: Boolean): String? = listOfNotNull(
+            "unconfident wait ON".takeIf { unconfidentWait },
+            "mirrored".takeIf { mirror },
+        ).joinToString(", ").ifEmpty { null }
+
+        /** Why a run must not go ahead, or null. A compare-only mode (the
+         *  unconfident wait, the mirror) must not record: a baseline recorded
+         *  or first created with it would not be the shipped ride. */
+        internal fun refusal(compareOnlyMode: String?, record: Boolean, baselineExists: Boolean): String? = when {
+            compareOnlyMode == null -> null
+            record -> "$compareOnlyMode is compare-only: re-recording with it would bake it into the baseline"
+            !baselineExists -> "$compareOnlyMode is compare-only: there is no baseline to compare with"
             else -> null
         }
+
+        /** [v] as it would read with traffic on the other side. A zero stays
+         *  +0f, so "no lateral reading" is unchanged however a float is compared. */
+        internal fun mirrored(v: Vehicle): Vehicle = v.copy(
+            lateralPos = flip(v.lateralPos),
+            rangeXm = flip(v.rangeXm),
+            rangeXmRaw = flip(v.rangeXmRaw),
+            speedXMs = v.speedXMs?.let { -it },
+        )
+
+        private fun flip(f: Float) = if (f == 0f) 0f else -f
     }
 }

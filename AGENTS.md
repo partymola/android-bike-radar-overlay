@@ -262,6 +262,9 @@ side.
   the flag. `-Pbikeradar.corpusUnconfidentWait=true` replays with the
   Experimental unconfident wait on; it is compare-only, and its diff is what
   the wait changes. Check that the result line says the wait was on.
+  `-Pbikeradar.corpusMirror=true` replays every ride mirrored left to right,
+  also compare-only: a clean run means the cues do not depend on which side
+  traffic passes. Its result line says "mirrored".
   - **The path must be the one Gradle sees, not the one your shell sees.**
     Gradle runs inside the build container with the repo mounted at
     `/workspace`, so a host path resolves to nothing there. A missing

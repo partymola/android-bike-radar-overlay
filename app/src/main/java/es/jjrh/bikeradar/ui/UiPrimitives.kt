@@ -360,8 +360,10 @@ fun BrToggle(
 // keeps Material's gesture handling (which V1 relied on inside a
 // vertically-scrolling Column to avoid horizontal-drag conflicts).
 // Prefixed `Br` to avoid colliding with `androidx.compose.material3.Slider`
-// on auto-import.
+// on auto-import. Material 3 1.5 deprecates this Slider overload for the
+// SliderState one.
 
+@Suppress("DEPRECATION")
 @Composable
 fun BrSlider(
     value: Float,

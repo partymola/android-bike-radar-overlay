@@ -373,6 +373,11 @@ internal fun HaFieldsBlock(
             autoCorrectEnabled = false,
         ),
     )
+    // Compose 1.13 deprecates VisualTransformation in favour of the secure
+    // field built on TextFieldState, which changes how the field holds its
+    // text.
+    @Suppress("DEPRECATION")
+    val tokenMask = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation()
     Field(
         label = stringResource(R.string.onboarding_ha_token_label),
         value = tokenField,
@@ -380,11 +385,7 @@ internal fun HaFieldsBlock(
         // Example value, not prose: a sample JWT prefix, left literal.
         placeholder = "eyJ0eXAiOiJKV1QiLCJh…",
         mono = true,
-        visualTransformation = if (tokenVisible) {
-            VisualTransformation.None
-        } else {
-            PasswordVisualTransformation()
-        },
+        visualTransformation = tokenMask,
         trailingIcon = {
             IconButton(onClick = onToggleTokenVisible) {
                 Icon(
@@ -533,6 +534,7 @@ private fun Field(
     onChange: (String) -> Unit,
     placeholder: String,
     mono: Boolean = false,
+    @Suppress("DEPRECATION")
     visualTransformation: VisualTransformation = VisualTransformation.None,
     trailingIcon: @Composable (() -> Unit)? = null,
     hint: String? = null,

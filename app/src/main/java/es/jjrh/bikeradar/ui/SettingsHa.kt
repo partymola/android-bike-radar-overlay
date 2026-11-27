@@ -246,17 +246,18 @@ internal fun SettingsHaContent(
                     autoCorrectEnabled = false,
                 ),
             )
+            // Compose 1.13 deprecates VisualTransformation in favour of the
+            // secure field built on TextFieldState, which changes how the
+            // field holds its text.
+            @Suppress("DEPRECATION")
+            val tokenMask = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation()
             HaField(
                 label = stringResource(R.string.onboarding_ha_token_label),
                 value = tokenField,
                 onChange = onTokenChange,
                 placeholder = "eyJ0eXAiOiJKV1QiLCJh…",
                 mono = true,
-                visualTransformation = if (tokenVisible) {
-                    VisualTransformation.None
-                } else {
-                    PasswordVisualTransformation()
-                },
+                visualTransformation = tokenMask,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Password,
                     imeAction = ImeAction.Done,
@@ -415,6 +416,7 @@ private fun HaField(
     onChange: (String) -> Unit,
     placeholder: String,
     mono: Boolean = false,
+    @Suppress("DEPRECATION")
     visualTransformation: VisualTransformation = VisualTransformation.None,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     trailingIcon: @Composable (() -> Unit)? = null,

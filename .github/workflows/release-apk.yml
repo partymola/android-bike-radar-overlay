@@ -56,7 +56,7 @@ jobs:
           packages: platform-tools
 
       - name: Install Android SDK platform 37
-        run: sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
+        run: sdkmanager "platforms;android-37.1" "build-tools;37.0.0"
 
       - name: Set up Gradle
         # No gradle-version: absent it, the action uses the wrapper, which is
